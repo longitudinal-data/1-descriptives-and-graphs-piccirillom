@@ -1,0 +1,100 @@
+---
+title: "Descriptives and Graphs"
+author: "Marilyn Piccirillo"
+date: "9/10/2017"
+output: pdf_document
+---
+
+```{r}
+rm(list = ls())
+library(foreign)
+library(tidyverse)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+
+#Pull in all three timepoints
+SuicideT1 <- read.spss("StressStudy_T1short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+SuicideT2 <- read.spss("StressStudy_T2short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+SuicideT3 <- read.spss("StressStudy_T3short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+
+#Merge all three timepoints
+SuicideMerge <- left_join(SuicideT1, SuicideT2, by = "ID")
+SuicideMerge <- left_join(SuicideMerge, SuicideT3, by= "ID")
+#Change order of columns
+SuicideMerge <- SuicideMerge[, c(1:2, 22, 28, 16:21, 23:27, 29:33, 3:15)]
+```
+
+Move your data into a long format and a wide format. Did you have any specific challenges that you encountered? If so, discuss them.
+```{r}
+#Data is originally in wide mode. Convert to long format:
+SuicideLong <- gather(SuicideMerge, key = "Time", value = "BSS", select(-ID, T1_BSSTot, T2_BSSTot, T3_BSSTot)) %>%
+arrange(SuicideLong$ID)
+
+SuicideLong
+
+#Convert back to wide mode:
+long_to_wide <- wide_to_long %>% 
+  spread(Weeks, Value)
+long_to_wide
+```
+I was inititally very confused by the purpose of the "Value" column - it took me a while to realize that this column wolud contain all the data for each variable in the long format. Upon converting back to a wide format, I realized that it arranges the variables in alphabetical order...not sure if that is ideal. But it is easy enough to re-arrange variables if necessary.
+
+Create a wave variable and date variable (if applicable).
+```{r}
+#Break apart date variables
+SuicideMerge$T1_Date <- as.Date(SuicideMerge$T1_DateStarted)
+SuicideMerge$T2_Date <- as.Date(SuicideMerge$T2_DateStarted)
+SuicideMerge$T3_Date <- as.Date(SuicideMerge$T3_DateStarted)
+#Change order of columns
+#SuicideMerge <- SuicideMerge[, c(1, 34:36, 5:33, 2:4)]
+```
+
+What is your sample size for each wave of assessment?
+```{r}
+length(which(!is.na(SuicideMerge$T1_Date))) #553 in the first wave
+length(which(!is.na(SuicideMerge$T2_Date))) #278 in the second wave
+length(which(!is.na(SuicideMerge$T3_Date))) #138 in the third wave
+```
+
+Take the date variable and convert it to a different date format such as time in study or age (if appropriate). What scale is most suitable for your analyses? (weeks/months/years?)
+```{r}
+#Create a difference variable for time (Days)
+SuicideMerge$Days <- difftime(SuicideMerge$T3_Date , SuicideMerge$T1_Date , units = c("days"))
+#Change order of columns
+#SuicideMerge <- SuicideMerge[, c(1, 37, 2:36)]
+
+#Create a difference variable for time (Weeks)
+SuicideMerge$Weeks <- difftime(SuicideMerge$T3_Date , SuicideMerge$T1_Date , units = c("weeks"))
+SuicideMerge$Weeks <- round(SuicideMerge$Weeks, digits = 2)
+#SuicideMerge <- SuicideMerge[, c(1, 38, 2:37)]
+```
+Weeks is probably the most suitable for my analyses.
+
+Graph your data using the different time metrics, fitting individual curves for each person.
+```{r}
+SuicideLong <- SuicideMerge %>% 
+  gather(2, 8, 14, 19, key = "Weeks", value = "BSSTot") %>% 
+  arrange(ID)
+
+Graph1 <- ggplot(SuicideMerge,
+   aes(x = "Week", y = "T1_BSSTot", group = ID)) + geom_point()  
+print(Graph1)
+```
+
+
+Create an overall average trend of your data (split up into groups if appropriate). Attempt to color your individual data points and/or shade different lines (highlight some particiapnts, highlight the average trend line but not the individual level lines)
+```{r}
+AvgTrend <-  gg1 <- ggplot(SuicideMerge, aes(x = SuicideMerge$Week, y = SMN7)) + geom_point() + stat_smooth() 
+gg7
+```
+
+
+Look at the correlations of your DV across time
+```{r}
+cor(SuicideMerge$T1_BSSTot, SuicideMerge$T2_BSSTot, use = "pairwise.complete.obs")
+cor(SuicideMerge$T2_BSSTot, SuicideMerge$T3_BSSTot, use = "pairwise.complete.obs")
+```
+Correlation between suicide score at T1 and T2 = .65; at T2 and T3 = .46
