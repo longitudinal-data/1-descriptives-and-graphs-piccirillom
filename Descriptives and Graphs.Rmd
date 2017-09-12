@@ -84,17 +84,35 @@ Suicidelong <- as.tibble(Suicidelong)
 Suicidelong <- arrange(Suicidelong, .by_group = ID)
 Suicidelong$Timepoint <- as.factor(Suicidelong$Timepoint)
 
-gg1 <- ggplot(Suicidelong,
-   aes(x = Timepoint, y = BSSscore, group = ID)) + geom_line() +  geom_point()
+gg1 <- ggplot(data = Suicidelong, aes(x = Timepoint, y = BSSscore)) + geom_line(aes(colour = factor(ID))) + geom_point(aes(colour = factor(ID))) + guides(colour = FALSE) + xlab("Timepoint") + ylab("Suicide score") + ggtitle ("Suicide score x Timepoint") + theme(plot.title = element_text(hjust = 0.5))
 gg1
 ```
 
 
 Create an overall average trend of your data (split up into groups if appropriate). Attempt to color your individual data points and/or shade different lines (highlight some particiapnts, highlight the average trend line but not the individual level lines)
 ```{r}
-Avgtrendgg <-  ggplot(Suicidelong,
-                      aes(x = Timepoint, y = BSSscore)) + geom_point() + stat_smooth() 
-Avgtrendgg
+#Add average trend line red
+#Color lines with BSSscore > 2 one color
+#Color lines with BSSscore < 2 another color
+
+# library(broom)
+# regressions <- Suicidelong %>%
+#   group_by(ID) %>%
+#   do(tidy(lm(BSSscore ~ Timepoint, data=.)))
+# regressions
+# 
+# regressions %>%
+#   group_by(term) %>%
+#   summarise(avg.reg = mean(estimate))
+
+#Plot graph with a average trend line
+gg2 <- gg1 <- ggplot(data = Suicidelong, aes(x = Timepoint, y = BSSscore)) + geom_point() + geom_line(aes(group = ID)) + guides(colour = FALSE) + stat_smooth(method = "lm", color = "red", size = 2) + xlab("Timepoint") + ylab("Suicide score") + ggtitle ("Suicide score x Timepoint") + theme(plot.title = element_text(hjust = 0.5))
+gg2
+
+
+#Plot graph with a average trend line and highlight lines above and below BSSscore = 2
+gg3 <- gg1 <- ggplot(data = Suicidelong, aes(x = Timepoint, y = BSSscore)) + geom_line(aes(group = ID, colour = ifelse(BSSscore > 2, "green", "blue"))) + geom_point() + guides(colour = FALSE) + stat_smooth(method = "lm", color = "black", size = 2) + xlab("Timepoint") + ylab("Suicide score") + ggtitle ("Suicide score x Timepoint") + theme(plot.title = element_text(hjust = 0.5))
+gg3
 ```
 
 
