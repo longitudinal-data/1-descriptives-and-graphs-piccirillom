@@ -10,6 +10,7 @@ rm(list = ls())
 library(foreign)
 library(tidyverse)
 library(plyr)
+library(tidyr)
 library(dplyr)
 library(ggplot2)
 library(lubridate)
@@ -25,26 +26,32 @@ SuicideMerge <- left_join(SuicideT1, SuicideT2, by = "ID")
 SuicideMerge <- left_join(SuicideMerge, SuicideT3, by= "ID")
 #Change order of columns
 SuicideMerge <- SuicideMerge[, c(1:2, 22, 28, 16:21, 23:27, 29:33, 3:15)]
+
+SuicideMerge$T1_Date <- as.Date(SuicideMerge$T1_DateStarted)
+SuicideMerge$T2_Date <- as.Date(SuicideMerge$T2_DateStarted)
+SuicideMerge$T3_Date <- as.Date(SuicideMerge$T3_DateStarted)
+
+SuicideShort <- select(SuicideMerge, ID, T1_Date, T2_Date, T3_Date, T1_BSSTot, T2_BSSTot, T3_BSSTot)
+SuicideShort <- as.tibble(SuicideShort)
 ```
 
 Move your data into a long format and a wide format. Did you have any specific challenges that you encountered? If so, discuss them.
 ```{r}
 #Data is originally in wide mode. Convert to long format:
-SuicideLong <- gather(SuicideMerge, key = "Time", value = "BSS", select(-ID, T1_BSSTot, T2_BSSTot, T3_BSSTot)) %>%
-arrange(SuicideLong$ID)
-
-SuicideLong
+Suicidelong <- gather (SuicideShort, Timepoint, BSSscore, T1_BSSTot:T3_BSSTot)
+Suicidelong <- as.tibble(Suicidelong) 
+Suicidelong <- arrange(Suicidelong, .by_group = ID)
 
 #Convert back to wide mode:
-long_to_wide <- wide_to_long %>% 
-  spread(Weeks, Value)
-long_to_wide
+Suicidewide <- spread(Suicidelong, Timepoint, BSSscore)
+Suicidewide <- as.tibble(Suicidewide)
 ```
-I was inititally very confused by the purpose of the "Value" column - it took me a while to realize that this column wolud contain all the data for each variable in the long format. Upon converting back to a wide format, I realized that it arranges the variables in alphabetical order...not sure if that is ideal. But it is easy enough to re-arrange variables if necessary.
+Identifying the key variable was pretty confusing! It was easier when I reduced the dataset down to 4 variables...
 
 Create a wave variable and date variable (if applicable).
 ```{r}
 #Break apart date variables
+#Code copied from above
 SuicideMerge$T1_Date <- as.Date(SuicideMerge$T1_DateStarted)
 SuicideMerge$T2_Date <- as.Date(SuicideMerge$T2_DateStarted)
 SuicideMerge$T3_Date <- as.Date(SuicideMerge$T3_DateStarted)
@@ -62,33 +69,32 @@ length(which(!is.na(SuicideMerge$T3_Date))) #138 in the third wave
 Take the date variable and convert it to a different date format such as time in study or age (if appropriate). What scale is most suitable for your analyses? (weeks/months/years?)
 ```{r}
 #Create a difference variable for time (Days)
-SuicideMerge$Days <- difftime(SuicideMerge$T3_Date , SuicideMerge$T1_Date , units = c("days"))
-#Change order of columns
-#SuicideMerge <- SuicideMerge[, c(1, 37, 2:36)]
+SuicideShort$Days <- difftime(SuicideShort$T3_Date , SuicideShort$T1_Date , units = c("days"))
 
 #Create a difference variable for time (Weeks)
-SuicideMerge$Weeks <- difftime(SuicideMerge$T3_Date , SuicideMerge$T1_Date , units = c("weeks"))
-SuicideMerge$Weeks <- round(SuicideMerge$Weeks, digits = 2)
-#SuicideMerge <- SuicideMerge[, c(1, 38, 2:37)]
+SuicideShort$Weeks <- difftime(SuicideShort$T3_Date , SuicideShort$T1_Date , units = c("weeks"))
+SuicideShort$Weeks <- round(SuicideShort$Weeks, digits = 2)
 ```
 Weeks is probably the most suitable for my analyses.
 
 Graph your data using the different time metrics, fitting individual curves for each person.
 ```{r}
-SuicideLong <- SuicideMerge %>% 
-  gather(2, 8, 14, 19, key = "Weeks", value = "BSSTot") %>% 
-  arrange(ID)
+Suicidelong <- gather (SuicideShort, Timepoint, BSSscore, T1_BSSTot:T3_BSSTot)
+Suicidelong <- as.tibble(Suicidelong) 
+Suicidelong <- arrange(Suicidelong, .by_group = ID)
+Suicidelong$Timepoint <- as.factor(Suicidelong$Timepoint)
 
-Graph1 <- ggplot(SuicideMerge,
-   aes(x = "Week", y = "T1_BSSTot", group = ID)) + geom_point()  
-print(Graph1)
+gg1 <- ggplot(Suicidelong,
+   aes(x = Timepoint, y = BSSscore, group = ID)) + geom_line() +  geom_point()
+gg1
 ```
 
 
 Create an overall average trend of your data (split up into groups if appropriate). Attempt to color your individual data points and/or shade different lines (highlight some particiapnts, highlight the average trend line but not the individual level lines)
 ```{r}
-AvgTrend <-  gg1 <- ggplot(SuicideMerge, aes(x = SuicideMerge$Week, y = SMN7)) + geom_point() + stat_smooth() 
-gg7
+Avgtrendgg <-  ggplot(Suicidelong,
+                      aes(x = Timepoint, y = BSSscore)) + geom_point() + stat_smooth() 
+Avgtrendgg
 ```
 
 
