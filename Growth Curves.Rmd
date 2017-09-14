@@ -1,9 +1,18 @@
 ---
-title: "Growth Curves"
+title: "Growth Curves Week 2"
 author: "Marilyn Piccirillo"
 date: "September 10, 2017"
 output: pdf_document
 ---
+Using Depression scores as DV
+Ran into problems with:
+1) Graphing residual variance from the random intercept only model versus the linear model
+2) Graphing fixed effects estimates with CIs from the fixed slope model
+3) Running a random slope model (not enough observations?)
+4) Graphing a density plot of the random effects from the fixed effect model
+5) Graphing the spaghetti plots.
+Help!
+
 ```{r}
 rm(list = ls())
 library(foreign)
@@ -23,8 +32,6 @@ SuicideT3 <- read.spss("StressStudy_T3short.sav", use.value.labels = FALSE, to.d
 #Merge all three timepoints
 SuicideMerge <- left_join(SuicideT1, SuicideT2, by = "ID")
 SuicideMerge <- left_join(SuicideMerge, SuicideT3, by= "ID")
-#Change order of columns
-SuicideMerge <- SuicideMerge[, c(1:2, 22, 28, 16:21, 23:27, 29:33, 3:15)]
 
 #Separatedates
 SuicideMerge$T1_Date <- as.Date(SuicideMerge$T1_DateStarted)
@@ -32,105 +39,139 @@ SuicideMerge$T2_Date <- as.Date(SuicideMerge$T2_DateStarted)
 SuicideMerge$T3_Date <- as.Date(SuicideMerge$T3_DateStarted)
 
 #Make a shorter dataset
-SuicideShort <- select(SuicideMerge, ID, T1_Date, T2_Date, T3_Date, T1_BSSTot, T2_BSSTot, T3_BSSTot)
-SuicideShort <- as.tibble(SuicideShort)
-#Convert SuicideShort to longform
-Suicidelong <- gather (SuicideShort, Timepoint, BSSscore, T1_BSSTot:T3_BSSTot)
-Suicidelong <- as.tibble(Suicidelong) 
-Suicidelong <- arrange(Suicidelong, .by_group = ID)
+Suicideshort <- select(SuicideMerge, ID, T1_Date, T2_Date, T3_Date, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_BDITot, T2_BDITot, T3_BDITot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot, Gender, Age, Ethn, SexOrien)
+#Converting into proper format
+Suicideshort$Gender <- as.factor(Suicideshort$Gender)
+Suicideshort$Ethn <- as.factor(Suicideshort$Ethn)
+Suicideshort$SexOrien <- as.factor(Suicideshort$SexOrien)
+Suicideshort$Age <- as.numeric(Suicideshort$Age)
+Suicideshort <- as.tibble(Suicideshort)
 
-Suicidelong$Timepoint <- as.factor(Suicidelong$Timepoint)
-Suicidelong$Timepoint <- as.numeric(Suicidelong$Timepoint)
+#Convert SuicideShort to longform
+Suicidelong <- gather(Suicideshort, Var, Val, select = c("T1_ACSSTot", "T1_BDITot", "T1_BSSTot", "T1_SIASTot", "T2_ACSSTot", "T2_BDITot", "T2_BSSTot", "T2_SIASTot", "T3_ACSSTot", "T3_BDITot", "T3_BSSTot", "T3_SIASTot"))
+Suicidelong <- arrange(Suicidelong, .by_group = ID)
+Suicidelong <- separate (Suicidelong, Var, c("Timepoint", "Variable"), sep = "_")
+Suicidelong <- spread(Suicidelong, Variable, Val)
+Suicidelong <- as.tibble(Suicidelong) 
+
+rm(SuicideT1, SuicideT2, SuicideT3, SuicideMerge)
 ```
 
 1.Run linear models on all of your subjects (a basic regression). What is the average intercept, the average slope?
 ```{r}
-SuicideLM <- lm(BSSscore ~ Timepoint, data = Suicidelong)
-summary(SuicideLM)
-#Average intercept = 1.1682
-#Average slopes = T2 (-.3503), T3 (-.6241)
+DepLM <- lm(BDITot ~ Timepoint, data = Suicidelong)
+summary(DepLM)
+#Average intercept = 10.4655
+#Average slopes = T2 (-2.44), T3 (-4.77)
 ```
 
 Now run a mlm/lmer model with only a random intercept. What is the ICC? What does residual variance look like compared to linear model? Create a graph to show this effect.
 ```{r}
 #Run a MLM/LMER model with only a random intercept
 library(lme4)
-Suicide1 <- lmer(BSSscore ~ 1 + (1 | ID), data = Suicidelong)
-summary(Suicide1)
+DepMLM1 <- lmer(BDITot ~ 1 + (1 | ID), data = Suicidelong)
+summary(DepMLM1)
 
 #What is the ICC?
-#Variance for Intercept = 6.086
-#Variance for Residual = 3.793
-#ICC = Variance for residual / (Total variance)
+library(sjstats)
+icc(DepMLM1)
+#ICC = .705. It looks like 70% of the variance is accounted for by the timepoints. 
 
-ICCSuicide1 <- 3.793 / (6.086 + 3.793)
-ICCSuicide1
+#What does residual variance look like compared to linear model? Create a graph to show this effect
+#library(sjPlot)
+#GraphDepMLM1 <- sjp.resid(DepMLM1, show.pred = FALSE)
+#GraphDepMLM1
 
-#What does residual vairance look like compared to linear model? Create a graph to show this effect
-library(sjPlot)
-Graph1 <- sjp.lmer(Suicide1, facet_grid = FALSE, sort = "sort.all")
-Graph1
-
-Graph2 <- sjp.lm(lm(BSSscore ~ 1 + Timepoint, data = Suicidelong))
-Graph2
+#GraphDepLM1 <- sjp.resid(DepLM, show.pred = FALSE)
+#GraphDepLM1
+#It looks like graphing residuals from the MLM puts ID on the x-axis whereas graphing residuals from the LM puts Timepoint on the x-axis...is this correct?
 ```
 
+```{r}
+#Trying another approach
+library(broom)
+lin.resid <- abs(augment(DepLM)[,c(5)])
+mean.lin.resid <- mean(lin.resid)
+sd.lin.resid <- sd(lin.resid)
+
+mlm.resid <- abs(augment((DepMLM1)[,c(4)]))
+mean.mlm.resid <- mean(mlm.resid)
+sd.mlm.resid <- sd(mlm.resid)
+
+DepResid <- data.frame("Type" = c("LinMod", "MLMMod"), "Mean" = c(mean.lin.resid, mean.mlm.resid), "SD" = c(sd.lin.resid, sd.mlm.resid))
+ResidPlot <- ggplot(DepResid, aes(Type, Mean)) + geom_col() + geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width = 0.2)
+ResidPlot + labs(y = "Average Residual ( +/- SD", x = "Type of Model")
+```
 
 Introduce a fixed slope term. What is the difference in terms of the fixed effects estimates between this estimate and the previous? Of the residual standard error? Create a graph to show both fixed effects estimates and the CIs around them.
 ```{r}
 #Introduce a fixed slope term. What is the difference in terms of the fixed effects esimates between this estimate and the previous?
-Suicide2 <- lmer(BSSscore ~ 1 + Timepoint + (1 | ID), data = Suicidelong)
-summary(Suicide2)
-summary(Suicide1)
-#The fixed effects intercept is larger for the model including the fixed slope term as compared to the random effects only model.
+DepMLM2 <- lmer(BDITot ~ Timepoint + (1 | ID), data = Suicidelong)
+summary(DepMLM2)
+#This model includes a fixed effect of Time. How do individual's depression scores change over time?
+
+summary(DepLM)
+#The fixed effects intercept esimate has decreased compared to the linear model. The slope for Timepoint 2 has increased compared to the linear model, but the slope for Timepoint 3 has decreased compared to the linear model. The standard error for the intercept has increased, but the standard error for slopes at both timepoints has decreased compared to the linear model.
 
 #What is the difference in terms of the residual standard error between the two models?
-Suicide1RSE <- sigma(Suicide1)
-Suicide1RSE
-Suicide2RSE <- sigma(Suicide2)
-Suicide2RSE
-#RSE for the fixed slope model is slightly smaller (1.92) as compared to the RSE for the random effects only model (1.95)
+DepLMRSE <- rse(DepLM)
+DepLMRSE
+DepMLM2RSE <- rse(DepMLM2)
+DepMLM2RSE
+#RSE has decreased in the model with the fixed effect as compared to the linear model. 
 
 #Create a graph to show both fixed effects estimates and the CIs around them
-Graph3 <- sjp.lmer(Suicide2, type = "fe.resid")
-Graph3
+GraphDepMLM2 <- sjp.lmer(DepMLM2, type = "ri.slope")
+GraphDepMLM2
 
 ```
 
 
 Run an additional model with a random slope. How does this change compare to the previous model? Should you keep the random slope or not?
 ```{r}
-Suicide3 <- lmer(BSSscore ~ 1 + Timepoint + (Timepoint | ID), data = Suicidelong)
-summary(Suicide3)
+DepMLM3 <- lmer(BDITot ~ Timepoint + (Timepoint|ID), data = Suicidelong)
+summary(DepMLM3)
 ```
 #got unidentifiable error message? Does this mean I don't have enough observations?
 
 Interpret the correlation between the slope and the intercept.
-I'm using the model with fixed effects only. The correlation between the slope and the intercept is -.746 which suggests that for people who start out at a higher point (i.e., higher intercept), they have smaller slopes. In other words, the people that start out with higher suicide scores, change less over time.
+
+I'm using the model with fixed effects only. The correlation between the slope for Timepoint 2 and the intercept is -.258 which suggests that for people who start out at a higher point (i.e., higher intercept), they have smaller slopes at Timepoint 2. The correlation between the slope for Timepoint 3 and the intercept is -.197, which similarly suggests that for people who start out at a higher point, they have smaller slopes at Timepoint 3.
 
 Create a density plot of the random effects from your final model.
 ```{r}
 library(merTools)
-re.sim <- REsim(Suicide2)
-p1 <- plotREsim(re.sim)
-p1
-p1.gg <- re.sim %>% 
-  filter(term == "Timepoint") 
-
-ggplot(p1.gg, aes(mean)) +
-  geom_density()
+library(ggplot2)
+re.sim.d <- REsim(DepMLM2)
+fe.sim.d <- FEsim(DepMLM2)
+#Intercept random effects
+dep.gg1 <- re.sim.d %>%
+  filter(term== "(Intercept)")
+ggplot(dep.gg1, aes(mean)) + geom_density()
+#Slope random effects
+dep.gg2 <- re.sim.d %>%
+  filter(term == "Timepoint")
+ggplot(dep.gg2, aes(mean)) + geom_density()
+#Why am I not seeing the density plot for slopes?
 ```
 
 
 Create a catepilar plot of the random effects. Is there any person that seems odd in terms of a large standard errors around intercept and slope estimates?
 ```{r}
-re.sim <- REsim(Suicide2)
-p1 <- plotREsim(re.sim, labs = TRUE)
-p1
-#Everyone seems to have a similar size standard error?
+cat.d <- plotREsim(re.sim.d, labs = TRUE)
+cat.d
+SigValues <- re.sim.d[ which(re.sim.d$mean > 0), ]
+#Everyone in the SigValues datagframe has effect ranges for the intercept that are statistically different from 0. Everyone in the caterpillar plot seems to have a similar size standard error?
 ```
 
 
 Create a plot of the trajectory, along with a spaghetti plot of each person's individual slope. Set the alpha level (transparency) on the individual slopes to make them easier to see.
+```{r}
+Suicidelong$Timepoint <- as.factor(Suicidelong$Timepoint)
+Suicidelong$Timepoint <- as.numeric(Suicidelong$Timepoint)
+coefsDep <- data.frame(coef(DepMLM2)[[1]])
+ggplot(Suicidelong, aes(Timepoint, BDITot)) + stat_smooth(aes(Timepoint, BDITot), method = lm, se = F) + geom_abline(coefsDep, aes(slope = Timepoint, intercept = X.intercept.), alpha = 0.2)
+```
+
 
 Create a plot of the trajectory, along with a spagehtti plot of each person's individual slope. Set the alpha level (transperancy) on the individual slopes to make them easier to see.
