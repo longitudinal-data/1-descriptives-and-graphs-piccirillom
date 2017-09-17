@@ -1,0 +1,331 @@
+---
+title: "Growth Curves Week 2"
+author: "Marilyn Piccirillo"
+date: "September 10, 2017"
+output: pdf_document
+---
+Using Depression scores as DV
+Ran into problems with:
+1) Graphing residual variance from the random intercept only model versus the linear model
+2) Graphing fixed effects estimates with CIs from the fixed slope model
+3) Running a random slope model (not enough observations?)
+4) Graphing a density plot of the random effects from the fixed effect model
+5) Graphing the spaghetti plots.
+Help!
+
+```{r}
+rm(list = ls())
+library(foreign)
+library(tidyverse)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(broom)
+library(ggplot2)
+library(lubridate)
+
+#Pull in all three timepoints
+SuicideT1 <- read.spss("StressStudy_T1short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+SuicideT2 <- read.spss("StressStudy_T2short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+SuicideT3 <- read.spss("StressStudy_T3short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+#Merge all three timepoints
+SuicideMerge <- left_join(SuicideT1, SuicideT2, by = "ID")
+SuicideMerge <- left_join(SuicideMerge, SuicideT3, by= "ID")
+#Separatedates
+SuicideMerge$T1_Date <- as.Date(SuicideMerge$T1_DateStarted)
+SuicideMerge$T2_Date <- as.Date(SuicideMerge$T2_DateStarted)
+SuicideMerge$T3_Date <- as.Date(SuicideMerge$T3_DateStarted)
+
+#Make a shorter dataset: Suicideshort
+Suicideshort <- select(SuicideMerge, ID, T1_Date, T2_Date, T3_Date, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_BDITot, T2_BDITot, T3_BDITot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot, Gender, Age, Ethn, SexOrien)
+#Convert variables into proper format
+Suicideshort$Gender <- as.factor(Suicideshort$Gender)
+Suicideshort$Ethn <- as.factor(Suicideshort$Ethn)
+Suicideshort$SexOrien <- as.factor(Suicideshort$SexOrien)
+Suicideshort$Age <- as.numeric(Suicideshort$Age)
+as.tibble(Suicideshort)
+
+#Convert SuicideShort to longform: Suicidelong
+Suicidelong <- gather(Suicideshort, Var, Val, select = c("T1_ACSSTot", "T1_BDITot", "T1_BSSTot", "T1_SIASTot", "T2_ACSSTot", "T2_BDITot", "T2_BSSTot", "T2_SIASTot", "T3_ACSSTot", "T3_BDITot", "T3_BSSTot", "T3_SIASTot"))
+Suicidelong <- arrange(Suicidelong, .by_group = ID)
+Suicidelong <- separate (Suicidelong, Var, c("Timepoint", "Variable"), sep = "_")
+Suicidelong <- spread(Suicidelong, Variable, Val)
+Suicidelong <- tbl_df(Suicidelong) 
+
+#Remove participants who only completed one timepoint
+Suicide2 <- tally(group_by(Suicidelong, ID, BSSTot), sort = TRUE)
+tally(Suicide2, sort = TRUE)
+tally(tally(Suicide2))
+Suicide2 <- arrange(Suicide2, ID)
+Suicide2 <- Suicide2 %>%
+  filter(!is.na(BSSTot)) #This created a separate dataset that tallied all "real" timepoints, based on BSS
+Suicide2$BSSTot<- NULL
+#Merge n variable into Suicide long
+Suicidelong <- right_join(Suicide2, Suicidelong, by = "ID") #Now I can filter Suicidelong based on n
+#Remove all rows from Suicidelong that only have 1 value
+Suicidelong <- filter(Suicidelong, n > 1)
+#Now Suicidelong only has data from people who completed >1 timepoint.
+
+#Clean up the environment
+rm(SuicideT1, SuicideT2, SuicideT3, SuicideMerge, Suicide2)
+```
+
+1.Run linear models on all of your subjects (a basic regression). What is the average intercept, the average slope?
+```{r}
+SuicideLM <- lm(BSSTot ~ Timepoint, data = Suicidelong)
+summary(SuicideLM)
+#Average intercept = .312
+#Average slopes = T2 (-.102), T3 (.013)
+```
+
+Now run a mlm/lmer model with only a random intercept. What is the ICC? What does residual variance look like compared to linear model? Create a graph to show this effect.
+```{r}
+#Run a MLM/LMER model with only a random intercept
+library(lme4)
+SuicideMLM1 <- lmer(BSSTot ~ 1 + (1 | ID), data = Suicidelong)
+summary(SuicideMLM1)
+
+#What is the ICC?
+library(sjstats)
+icc(SuicideMLM1)
+#ICC = .546. It looks like roughly half of the variance is divided among between and within-person (a little bit more variance is attributable to between-person variation). 
+
+#What does residual variance look like compared to linear model? Create a graph to show this effect
+library(sjPlot)
+sjp.lmer(SuicideMLM1, facet.grid = F, sort = "sort.all")
+
+sjp.lm(SuicideLM, facet.grid = F)
+
+
+library(broom)
+library(ggplot2)
+library(ggthemes)
+#Extract the model information
+Suicide_mlm1_fitted = augment(SuicideMLM1, Suicidelong)
+Suicide_lm_fitted = augment(SuicideLM, Suicidelong)
+
+#Create a new matrix to store the residual information
+Suicide_residual_plot = matrix(nrow = 2, ncol = 2) #Setting up matrix
+colnames(Suicide_residual_plot) = c("Model", "SE_residuals") #Naming columns
+Suicide_residual_plot = as.data.frame(Suicide_residual_plot) #Making matrix into a dataframe
+Suicide_residual_plot$Model = c("Linear Model", "MLM (no intercept)") #Pulling in the information
+Suicide_residual_plot$SE_residuals = c(sd(Suicide_lm_fitted$.resid), sd(Suicide_mlm1_fitted$.resid)) #Converting std. error into std. dev?
+
+#Plotting the residuals
+ggplot(Suicide_residual_plot, aes(x = Model, y = SE_residuals)) + 
+  geom_bar(fill = "salmon2", stat = "identity", width = 0.5) +
+  theme_few()+
+  ggtitle("Standard Error of Residuals \n for Linear Model & MLM")
+
+#Looks like there is more residual SE in the linear model as compared to the intercept-only model, which means that the intercept-only model (MLM) does a better job of modeling suicide over time.
+```
+
+Introduce a fixed slope term. What is the difference in terms of the fixed effects estimates between this estimate and the previous? Of the residual standard error? Create a graph to show both fixed effects estimates and the CIs around them.
+```{r}
+#Introduce a fixed slope term. What is the difference in terms of the fixed effects esimates between this estimate and the previous?
+SuicideMLM2 <- lmer(BSSTot ~ Timepoint + (1 | ID), data = Suicidelong)
+summary(SuicideMLM2)
+summary(SuicideMLM1)
+#This model includes a fixed effect of Time. How do individual's suicide scores change over time?
+#With the fixed effect estimate of the change in suicide score as a function of time, we now can add a slope to our regression lines for each individual. The intercept only model fit parallel lines with slope 0 for each subject. Now we can fit parallel lines for each subject (effect is fixed), but with slope = -.105 at Time2 and slope = -.149 at Time 3.
+
+#What is the difference in terms of the residual standard error between the two models?
+RSE1 <- rse(SuicideMLM1)
+RSE2 <- rse(SuicideMLM2)
+RSE1
+RSE2
+#RSE has decreased slightly in the model with the fixed effect as compared to intercept only model. This suggests that the fixed effect model performs slightly better than the intercept only model in terms of modeling suicide scores over time.
+RSEdiff <- RSE1-RSE2
+RSEdiff
+#However the fixed effect model only explains .003 more residual variance as compared to the intercept-only model. This means they are basically equally good at describing variance...maybe this means that suicide scores didn't really change much over time. That if you score high at T1, you'll also score high at T3; if you score low at T1, you'll also end low at T3? 
+
+#Create a graph to show both fixed effects estimates and the CIs around them
+GraphSuicideFE <- sjp.lmer(SuicideMLM2, type = "fe")
+GraphSuicideFE
+#The confidence interval around Timepoint 3 looks really large though...does this mean there is a lot of individual variability? However, both the confidence interval for both fixed efffects crosses 0, which suggests they aren't significant. This means that people don't significantly change in their suicide scores across time?
+```
+
+Run an additional model with a random slope. How does this change compare to the previous model? Should you keep the random slope or not?
+```{r}
+SuicideMLM3 <- lmer(BSSTot ~ Timepoint + (Timepoint|ID), data = Suicidelong)
+summary(SuicideMLM3)
+```
+#Got unidentifiable error message? Does this mean I don't have enough observations?
+##This is probably becuase I only have 3 timepoints and people are missing too many observations. Basically, I'm asking too much of my data.
+##Fixes: Simplify model or have more data. Consider only including people with at least 2 timepoints. Could also consider imputation
+###Still can't run the random slope model.... :(
+####Maybe my Timepoint variable is messed up...
+
+##########################################################################################################
+```{r}
+#Maybe if I calculated a Days in Study variable, rather than a Timepoint variable?
+Suicidelong$WhichDate <- ifelse(!is.na (Suicidelong$T3_Date), "No", "Yes") #Create a variable to use for ifelse
+Suicidelong$Days <- ifelse(Suicidelong$WhichDate=="Yes", (interval(Suicidelong$T1_Date, Suicidelong$T2_Date)), (interval(Suicidelong$T1_Date, Suicidelong$T3_Date))) #Instructs R to use T3 if avaiable or T2 if not available
+Suicidelong$Days <- as.duration(Suicidelong$Days)
+Suicidelong$Days <- as.numeric(Suicidelong$Days) / (3600*24) #Converting Days into a readable date
+Suicidelong$WhichDate <- NULL #Removes WhichDate variable
+```
+#Starting again.
+1.Run linear models on all of your subjects (a basic regression). What is the average intercept, the average slope?
+```{r}
+SuicideLM2 <- lm(BSSTot ~ Days, data = Suicidelong)
+summary(SuicideLM2)
+#This model is testing the effect of days of being in the study (Days) on suicide scores (BSSTot). 
+##There is no real reason to think that an individual's suicidality would change systematically as a result of being in the study for a longer period of time, so results from this model won't mean much to my personal hypotheses.
+
+#Average Intercept is .017. This means that the expected suicide score is .017 when you consider the average number of days that an individual is in the study.
+
+#Average slope is .007. This means that the for every day increase of being in the study, the suicide score for the average individual increases by .007. 
+
+#Again, these numbers are really small and basically meaningless. But this is ok since we don't really expect people's scores to change as a result of staying in the study longer. 
+```
+
+Now run a mlm/lmer model with only a random intercept. What is the ICC? What does residual variance look like compared to linear model? Create a graph to show this effect.
+```{r}
+#Run a MLM/LMER model with only a random intercept
+library(lme4)
+SuicideMLM1a <- lmer(BSSTot ~ 1 + (1 | ID), data = Suicidelong)
+summary(SuicideMLM1a)
+
+#What is the ICC?
+library(sjstats)
+icc(SuicideMLM1a)
+#ICC = .546. It looks like roughly half of the variance is divided among between and within-person (a little bit more variance is attributable to between-person variation). 
+
+#Nothing changed here as a result of using the Days variable (makes sense!)
+
+#What does residual variance look like compared to linear model? Create a graph to show this effect
+library(broom)
+library(ggplot2)
+library(ggthemes)
+#Extract the model information
+Suicide_mlm1a_fitted = augment(SuicideMLM1a, Suicidelong)
+Suicide_lm2_fitted = augment(SuicideLM2, Suicidelong)
+
+#Create a new matrix to store the residual information
+Suicide_residual_plot2 = matrix(nrow = 2, ncol = 2) #Setting up matrix
+colnames(Suicide_residual_plot2) = c("Model", "SE_residuals") #Naming columns
+Suicide_residual_plot2 = as.data.frame(Suicide_residual_plot2) #Making matrix into a dataframe
+Suicide_residual_plot2$Model = c("Linear Model", "MLM (no intercept)") #Pulling in the information
+Suicide_residual_plot2$SE_residuals = c(sd(Suicide_lm2_fitted$.resid), sd(Suicide_mlm1a_fitted$.resid)) 
+
+#Plotting the residuals again
+ggplot(Suicide_residual_plot2, aes(x = Model, y = SE_residuals)) + 
+  geom_bar(fill = "salmon2", stat = "identity", width = 0.5) +
+  theme_few()+
+  ggtitle("Standard Error of Residuals \n for Linear Model & MLM")
+
+#Looks like there is *still* more residual SE in the linear model as compared to the intercept-only model, which means that the intercept-only model (MLM) does a better job of modeling suicide over time.
+```
+
+Introduce a fixed slope term. What is the difference in terms of the fixed effects estimates between this estimate and the previous? Of the residual standard error? Create a graph to show both fixed effects estimates and the CIs around them.
+```{r}
+#Introduce a fixed slope term. What is the difference in terms of the fixed effects esimates between this estimate and the previous?
+SuicideMLM2a <- lmer(BSSTot ~ Days + (1 | ID), data = Suicidelong)
+summary(SuicideMLM2a)
+summary(SuicideMLM1a)
+#This model includes a fixed effect of Days How do individual's suicide scores change over the number of days of being in the study?
+
+#With the fixed effect estimate of the change in suicide score as a function of time, we now can add a slope to our regression lines for each individual. The intercept only model fit parallel lines with slope 0 for each subject. Now we can fit parallel lines for each subject (effect is fixed), but with slope = .006 for Days.
+
+#What is the difference in terms of the residual standard error between the two models?
+RSE1a <- rse(SuicideMLM1a)
+RSE2a <- rse(SuicideMLM2a)
+RSE1a
+RSE2a
+#RSE has increased slightly in the model with the fixed effect as compared to intercept only model. This suggests that the fixed effect model performs slightly worse than the intercept only model in terms of modeling suicide scores over time.
+RSEdiff2 <- RSE2a-RSE1a
+RSEdiff2
+#However the intercept only model only explains .001 more residual variance as compared to the fixed-effect model. This means they are basically equally good at describing variance...maybe this means that suicide scores didn't really change much over time (probably makes sense). That if you score high at at the beginning of the study, you'll also score high at the end of the study; if you score low at the beginning of the study, you'll also end low at the end of the study? 
+
+#Create a graph to show both fixed effects estimates and the CIs around them
+GraphSuicideFE2 <- sjp.lmer(SuicideMLM2a, type = "fe")
+GraphSuicideFE2
+#The confidence interval around Days still looks really large...which may mean that there is a lot of individual variability? Not sure...However, the confidence interval for the fixed efffect of Days still crosses 0, which suggests that it isn't significant. This means that people don't significantly change in their suicide scores across time?
+```
+
+#Trying to run the random slope model again
+```{r}
+SuicideMLM3a <- lmer(BSSTot ~ Days + (Days|ID), data = Suicidelong)
+summary(SuicideMLM3a)
+
+RSE3a <- rse(SuicideMLM3a)
+RSE3a
+
+RSE2a
+RSEdiff3 <- RSE2a-RSE3a
+RSEdiff3
+
+#Model with the random effects has less residual variance so it may be better at explaining the variance in the model. Can also compare the two models using anova
+
+anova(SuicideMLM2a, SuicideMLM3a)
+#The test is significant suggesting that the random slopes model explains significnatly more variance and is a better model. Thus, we should keep the random slopes.
+```
+
+Interpret the correlation between the slope and the intercept.
+```{r}
+summary(SuicideMLM3a)
+#The correlation of fixed effects is -.933 which means the slope and intercept are highly negatively correlated. Thus, if someone starts out with a high intercept, they will have a very small slope or vice versa?
+```
+
+Create a density plot of the random effects from your final model.
+```{r}
+library(merTools)
+Suicide_re.sim = REsim(SuicideMLM3a)
+
+Suicide_fe.sim = FEsim(SuicideMLM2a)
+
+library(ggplot2)
+Suicide_g1 <- Suicide_re.sim %>%
+  filter(term == "(Intercept)")
+
+ggplot(Suicide_g1, aes(mean)) +
+  geom_density() +
+    theme_few()+
+  ggtitle("Suicide: Density Plot for Intercept")
+
+Suicide_g2 <- Suicide_re.sim %>%
+  filter(term == "Days")
+
+ggplot(Suicide_g2, aes(mean)) +
+  geom_density() +
+    theme_few()+
+  ggtitle("Suicide: Density Plot for Days")
+```
+
+Create a catepilar plot of the random effects. Is there any person that seems odd in terms of a large standard errors around intercept and slope estimates?
+```{r}
+Suicide_p1 = plotREsim(Suicide_re.sim)
+Suicide_p1
+```
+
+Create a plot of the trajectory, along with a spaghetti plot of each person's individual slope. Set the alpha level (transparency) on the individual slopes to make them easier to see.
+```{r}
+library(broom)
+Suicide_fittedvalues = augment(SuicideMLM3a, Suicidelong)
+Suicide_fittedvalues$ID = as.factor(Suicide_fittedvalues$ID)
+ggplot(Suicide_fittedvalues, aes(x = Days, y = .fitted)) +
+  geom_line(aes(color = ID), show.legend = F, alpha = 0.8 ) +
+  geom_abline(slope = 0.0153, intercept = -.3007, 
+              color = "red", size = 1)+  
+  theme_few()+
+  xlab("Days") + ylab("Suicide scores") +
+  ggtitle("Suicide: Plotting Individual Slopes & Trajectory")
+```
+
+
+Create a plot of the trajectory, along with a spagehtti plot of each person's individual slope. Set the alpha level (transperancy) on the individual slopes to make them easier to see.
+```{r}
+library(broom)
+sample_fittedvalues = augment(sample_mlm3, alda_sample)
+sample_fittedvalues$ID = as.factor(sample_fittedvalues$ID)
+ggplot(sample_fittedvalues, aes(x = time, y = .fitted)) +
+  theme_few()+
+  geom_line(aes(color = ID), show.legend = F, alpha = 0.8 ) +
+  geom_abline(slope = -0.005727, intercept = 0.222121, 
+              color = "red", size = 1)+
+  xlab("Time") + ylab("DMN6") +
+  ggtitle("Sample Data: Plotting Individual Slopes & Trajectory")
+```
+##Need help with the last two graphs!
+##Also need help with interepting what the random effects graphs are showing...
