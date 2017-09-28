@@ -1,0 +1,177 @@
+---
+title: "Week 3"
+author: "Marilyn Piccirillo"
+date: "September 14, 2017"
+output: pdf_document
+---
+```{r, echo = FALSE}
+rm(list = ls())
+library(foreign)
+library(tidyverse)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(broom)
+library(ggplot2)
+library(lubridate)
+library(lme4)
+
+#Pull in all three timepoints
+SuicideT1 <- read.spss("StressStudy_T1short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+SuicideT2 <- read.spss("StressStudy_T2short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+SuicideT3 <- read.spss("StressStudy_T3short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+
+#Merge all three timepoints
+SuicideMerge <- left_join(SuicideT1, SuicideT2, by = "ID")
+SuicideMerge <- left_join(SuicideMerge, SuicideT3, by= "ID")
+
+#Separatedates
+SuicideMerge$T1_Date <- as.Date(SuicideMerge$T1_DateStarted)
+SuicideMerge$T2_Date <- as.Date(SuicideMerge$T2_DateStarted)
+SuicideMerge$T3_Date <- as.Date(SuicideMerge$T3_DateStarted)
+
+#Make a shorter dataset
+Suicideshort <- select(SuicideMerge, ID, T1_Date, T2_Date, T3_Date, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_BDITot, T2_BDITot, T3_BDITot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot, Gender, Age, Ethn, SexOrien)
+#Converting into proper format
+Suicideshort$Gender <- as.factor(Suicideshort$Gender)
+Suicideshort$Ethn <- as.factor(Suicideshort$Ethn)
+Suicideshort$SexOrien <- as.factor(Suicideshort$SexOrien)
+Suicideshort$Age <- as.character(Suicideshort$Age)
+Suicideshort$Age <- as.numeric(Suicideshort$Age)
+Suicideshort <- as.tibble(Suicideshort)
+
+#Convert SuicideShort to longform
+Suicidelong <- gather(Suicideshort, Var, Val, select = c("T1_ACSSTot", "T1_BDITot", "T1_BSSTot", "T1_SIASTot", "T2_ACSSTot", "T2_BDITot", "T2_BSSTot", "T2_SIASTot", "T3_ACSSTot", "T3_BDITot", "T3_BSSTot", "T3_SIASTot"))
+Suicidelong <- arrange(Suicidelong, .by_group = ID)
+Suicidelong <- separate (Suicidelong, Var, c("Timepoint", "Variable"), sep = "_")
+Suicidelong <- spread(Suicidelong, Variable, Val)
+Suicidelong <- as.tibble(Suicidelong) 
+
+rm(SuicideT1, SuicideT2, SuicideT3, SuicideMerge)
+
+Suicidelong$WhichDate <- ifelse(!is.na (Suicidelong$T3_Date), "No", "Yes") #Create a variable to use for ifelse
+Suicidelong$Days <- ifelse(Suicidelong$WhichDate=="Yes", (interval(Suicidelong$T1_Date, Suicidelong$T2_Date)), (interval(Suicidelong$T1_Date, Suicidelong$T3_Date))) #Instructs R to use T3 if avaiable or T2 if not available
+Suicidelong$Days <- as.duration(Suicidelong$Days)
+Suicidelong$Days <- as.numeric(Suicidelong$Days) / (3600*24) #Converting Days into a readable date
+Suicidelong$WhichDate <- NULL #Removes WhichDate variable
+
+#DECIDING TO ONLY KEEP PPL WHO ONLY COMPLETED THREE TIME POINTS
+#Remove participants who only completed *ONE OR TWO* timepoints
+Suicide2 <- tally(group_by(Suicidelong, ID, BSSTot), sort = TRUE)
+tally(Suicide2, sort = TRUE)
+tally(tally(Suicide2))
+Suicide2 <- arrange(Suicide2, ID)
+Suicide2 <- Suicide2 %>%
+  filter(!is.na(BSSTot)) #This created a separate dataset that tallied all "real" timepoints, based on BSS
+Suicide2$BSSTot<- NULL
+#Merge n variable into Suicide long
+Suicidelong <- right_join(Suicide2, Suicidelong, by = "ID") #Now I can filter Suicidelong based on n
+#Remove all rows from Suicidelong that only have 1 value
+Suicidelong <- filter(Suicidelong, n > 2)
+#Now Suicidelong only has data from people who completed >1 timepoint.
+
+rm(Suicideshort, Suicide2)
+```
+
+Run a series of models using a time-invariant nominal covariate. a) where the covariate only predicts the intercept b) predicts both intercept and slope c) is rescaled eg centering. For all models, how does your model change from model to model. What is your final model?
+```{r}
+#Deciding to use BDI (depression) because there's more variability?
+Dep1 <- lmer(BDITot ~ Days + Gender + (Days | ID), data = Suicidelong)
+summary(Dep1)
+library(car)
+Anova(Dep1)
+#Gender significantly predicts depression at Time 1 (Intercept).
+
+Dep2 <- lmer(BDITot ~ Days + Gender + Gender*Days + (Days | ID), data = Suicidelong)
+summary(Dep2)
+Anova(Dep2)
+#Gender still significantly predicts depression at Time 1 (Intercept), but does not predict change in depression over time (Slope).
+
+#Recoding Gender: 0 = Female, 1 = Male
+Suicidelong$Gender<-recode_factor(Suicidelong$Gender, '2'='0')
+Suicidelong$Gender<-recode_factor(Suicidelong$Gender, '3'='NA')
+Suicidelong$Gender<-recode_factor(Suicidelong$Gender, '4'='NA')
+
+Dep3 <- lmer(BDITot ~ Days + Gender + (Days | ID), data = Suicidelong)
+summary(Dep3)
+Anova(Dep3)
+#Women are significantly more likely to experience depression over time.
+```
+
+Introduce a time-invariant continuous covariate and run models a-c from #1.
+```{r}
+#Time-invariant continuous covariate = Age
+Dep1a <- lmer(BDITot ~ Days + Age + (Days | ID), data = Suicidelong)
+summary(Dep1a)
+Anova(Dep1a)
+#Age does not significantly depression at Time 1 (Intercept).
+
+Dep2a <- lmer(BDITot ~ Days + Age + Age*Days + (Days | ID), data = Suicidelong)
+summary(Dep2a)
+Anova(Dep2a)
+#Age does not significantly predict depression at Time 1 (Intercept), nor change in depression scores over time (Slope).
+
+#Recenter Age at mean
+Suicidelong$Age<-scale(Suicidelong$Age, center = TRUE, scale = FALSE)
+Dep3a <- lmer(BDITot ~ Days + Age + (Age | ID), data = Suicidelong)
+summary(Dep3a)
+Anova(Dep3a)
+#When Age is recented at the mean, it still does not significantly predict depression at Time 1.
+```
+
+Graph both of your final models for the continuous and nominal models above.
+```{r}
+library(sjPlot)
+GraphDep3 <- sjp.lmer(Dep3, type =  "fe", title = "The Effect of Gender on Depression (Intercept)")
+GraphDep3
+
+GraphDep3a <- sjp.lmer(Dep3a, type =  "fe", title = "The Effect of Age on Depression (Intercept)")
+GraphDep3a
+```
+
+
+Calculate confidence intervals around your estimates for your final models
+```{r}
+#Confidence intervals around estimates for Gender model (Dep3)
+summary(Dep3)
+InterceptUB <- 5.31005 + (1.96 * (2.42571* sqrt(294)))
+InterceptLB <- 5.31005 - (1.96 * (2.42571* sqrt(294)))
+
+DaysUB <- -0.04575 + (1.96 * (0.03383* sqrt(294)))
+DaysLB <- -0.04575 - (1.96 * (0.03383* sqrt(294)))
+
+GenderUB <- -4.06971 + (1.96 * (1.70972* sqrt(294)))
+GenderUB <- -4.06971 - (1.96 * (1.70972* sqrt(294)))
+
+#Confidence intervals around estimates for Age model (Dep3a)
+summary(Dep3a)
+InterceptUB <- 6.719051 + (1.96 * (2.604875* sqrt(294)))
+InterceptLB <- 6.719051 - (1.96 * (2.604875* sqrt(294)))
+
+DaysUB <- -0.003268 + (1.96 * (0.054784* sqrt(294)))
+DaysLB <- -0.003268 - (1.96 * (0.054784* sqrt(294)))
+
+AgeUB <- -0.057498 + (1.96 * (0.261318* sqrt(294)))
+AgeLB <- -0.057498 - (1.96 * (0.261318* sqrt(294)))
+```
+
+
+Include both types of covariates in a single model. How does your interpretation of parameters change?
+```{r}
+Dep4 <- lmer(BDITot ~ Days + Age + Gender + (Days|ID), data = Suicidelong)
+summary(Dep4)
+Anova(Dep4)
+#The effect of gender on Depression at Time 1 (Intercept) has lessened, but is still significant. This suggests that while Age accounts for some of the variance in depression, it accounts for a significant amount of the variance and does not significantly lessen the effect that gender has on depression. 
+```
+
+If you have one available, introduce a time-varying covariate.
+```{r}
+Dep5 <- lmer(BDITot ~ Days*SIASTot + (Days|ID), data = Suicidelong)
+summary(Dep5)
+Anova(Dep5)
+#Social anxiety score significantly predicts depression at Time 1 (Intercept), but does not significantly predict change in depression over time (Slope).
+
+GraphDep5 <- sjp.int(Dep5, swap.pred = TRUE, mdrt.values = "meansd", title = "The Effect of Social Anxiety on Depression Over Time")
+GraphDep5
+```
+
