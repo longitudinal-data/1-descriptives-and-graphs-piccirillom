@@ -246,6 +246,8 @@ GraphSuicideFE2
 
 #Trying to run the random slope model again
 ```{r}
+library(lme4)
+library(Matrix)
 SuicideMLM3a <- lmer(BSSTot ~ Days + (Days|ID), data = Suicidelong)
 summary(SuicideMLM3a)
 
