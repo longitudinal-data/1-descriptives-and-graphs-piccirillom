@@ -78,10 +78,12 @@ icc(DepMLM1)
 #ICC = .705. It looks like 70% of the variance is accounted for by the timepoints. 
 
 #What does residual variance look like compared to linear model? Create a graph to show this effect
-#library(sjPlot)
-#GraphDepMLM1 <- sjp.resid(DepMLM1, show.pred = FALSE)
-#GraphDepMLM1
+library(sjPlot)
+LMresid <- as.data.frame(residuals(DepLM))
+MLMresid <- as.data.frame(residuals(DepMLM1))
+Residuals <- data.frame(LMresid, MLMresid)
 
+sjplot(Residuals)
 #GraphDepLM1 <- sjp.resid(DepLM, show.pred = FALSE)
 #GraphDepLM1
 #It looks like graphing residuals from the MLM puts ID on the x-axis whereas graphing residuals from the LM puts Timepoint on the x-axis...is this correct?
@@ -99,7 +101,7 @@ mean.mlm.resid <- mean(mlm.resid)
 sd.mlm.resid <- sd(mlm.resid)
 
 DepResid <- data.frame("Type" = c("LinMod", "MLMMod"), "Mean" = c(mean.lin.resid, mean.mlm.resid), "SD" = c(sd.lin.resid, sd.mlm.resid))
-ResidPlot <- ggplot(DepResid, aes(Type, Mean)) + geom_col() + geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width = 0.2)
+ResidPlot <- ggplot(Residuals, aes(Type, Mean)) + geom_col() + geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width = 0.2)
 ResidPlot + labs(y = "Average Residual ( +/- SD", x = "Type of Model")
 ```
 
@@ -132,7 +134,9 @@ Run an additional model with a random slope. How does this change compare to the
 DepMLM3 <- lmer(BDITot ~ Timepoint + (Timepoint|ID), data = Suicidelong)
 summary(DepMLM3)
 ```
-#got unidentifiable error message? Does this mean I don't have enough observations?
+#Got unidentifiable error message? Does this mean I don't have enough observations?
+##This is probably becuase I only have 3 timepoints and people are missing too many observations. Basically, I'm asking too much of my data.
+##Fixes: Simplify model or have more data. Consider only including people with at least 2 timepoints. Could also consider imputation
 
 Interpret the correlation between the slope and the intercept.
 
