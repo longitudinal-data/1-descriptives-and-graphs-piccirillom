@@ -28,12 +28,11 @@ Plans:
 Data Prep:
 Undergraduate students completed self-report measures (and some clinical measures) three times, 6 weeks apart. Unfortunately, there was lots of attrition...over 500 at the first time point, approx. 150 at the third time point. Only ~100 people completed all three timepoints. For the sake of the class, I'm going to only show models using people who completed all three time points, although this introduces a lot of sample bias :o
 
-I was originally interested in modeling suicidality which was measured in this study through the Beck Suicide Scale, which asks questions about whether or not they've ever thought about suicide, had a plan, made an attempt, etc. Although a surprisingly high number of people do have  scores for this measure, it's not really enough to model with. I instead chose to model depression scores over the 3- month period using the BDI-II.
+I was originally interested in modeling suicidality which was measured in this study through the Beck Suicide Scale, which asks questions about whether or not they've ever thought about suicide, had a plan, made an attempt, etc. Although a moderately high number of people do have scores for this measure, it's not really enough to model with. I instead chose to model depression scores over the 3- month period using the BDI-II.
 ```{r}
 rm(list = ls())
 library(foreign)
 library(tidyverse)
-library(plyr)
 library(dplyr)
 library(tidyr)
 library(broom)
@@ -43,133 +42,125 @@ library(lme4)
 library(lavaan)
 library(sjstats)
 library(sjPlot)
+library(semPlot)
 
 #Pull in all three timepoints
-SuicideT1 <- read.spss("StressStudy_T1short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
-SuicideT2 <- read.spss("StressStudy_T2short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
-SuicideT3 <- read.spss("StressStudy_T3short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT1 <- read.spss("StressStudy_T1short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT2 <- read.spss("StressStudy_T2short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT3 <- read.spss("StressStudy_T3short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
 
 #Merge all three timepoints
-SuicideMerge <- left_join(SuicideT1, SuicideT2, by = "ID")
-SuicideMerge <- left_join(SuicideMerge, SuicideT3, by= "ID")
+DepressionMerge <- left_join(DepressionT1, DepressionT2, by = "ID")
+DepressionMerge <- left_join(DepressionMerge, DepressionT3, by= "ID")
 
 #Separatedates
-SuicideMerge$T1_Date <- as.Date(SuicideMerge$T1_DateStarted)
-SuicideMerge$T2_Date <- as.Date(SuicideMerge$T2_DateStarted)
-SuicideMerge$T3_Date <- as.Date(SuicideMerge$T3_DateStarted)
+DepressionMerge$T1_Date <- as.Date(DepressionMerge$T1_DateStarted)
+DepressionMerge$T2_Date <- as.Date(DepressionMerge$T2_DateStarted)
+DepressionMerge$T3_Date <- as.Date(DepressionMerge$T3_DateStarted)
 
 #Make a shorter dataset
-Suicideshort <- dplyr::select(SuicideMerge, ID, T1_Date, T2_Date, T3_Date, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_BDITot, T2_BDITot, T3_BDITot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot, Gender, Age, Ethn, SexOrien)
+Depressionshort <- dplyr::select(DepressionMerge, ID, T1_Date, T2_Date, T3_Date, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_BDITot, T2_BDITot, T3_BDITot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot, Gender, Age, Ethn, SexOrien)
 #Converting into proper format
-Suicideshort$Gender <- as.factor(Suicideshort$Gender)
-Suicideshort$Ethn <- as.factor(Suicideshort$Ethn)
-Suicideshort$SexOrien <- as.factor(Suicideshort$SexOrien)
-Suicideshort$Age <- as.character(Suicideshort$Age)
-Suicideshort$Age <- as.numeric(Suicideshort$Age)
-Suicideshort <- as.tibble(Suicideshort)
+Depressionshort$Gender <- as.factor(Depressionshort$Gender)
+Depressionshort$Ethn <- as.factor(Depressionshort$Ethn)
+Depressionshort$SexOrien <- as.factor(Depressionshort$SexOrien)
+Depressionshort$Age <- as.character(Depressionshort$Age)
+Depressionshort$Age <- as.numeric(Depressionshort$Age)
+Depressionshort <- as.tibble(Depressionshort)
 
 #Make date variables
-Suicideshort$T1_Day <- difftime(Suicideshort$T1_Date, Suicideshort$T1_Date, units = c("days"))
-Suicideshort$T2_Day <- difftime(Suicideshort$T2_Date, Suicideshort$T1_Date, units = c("days"))
-Suicideshort$T3_Day <- difftime(Suicideshort$T3_Date, Suicideshort$T1_Date, units = c("days"))
+Depressionshort$T1_Day <- difftime(Depressionshort$T1_Date, Depressionshort$T1_Date, units = c("days"))
+Depressionshort$T2_Day <- difftime(Depressionshort$T2_Date, Depressionshort$T1_Date, units = c("days"))
+Depressionshort$T3_Day <- difftime(Depressionshort$T3_Date, Depressionshort$T1_Date, units = c("days"))
 
+Depressionwide <- select(Depressionshort, everything())
 #Selecting only people who completed all three time points
-Suicideshort <- subset(Suicideshort, T1_BSSTot >= "0" & T2_BSSTot >= "0" & T3_BSSTot >= "0")
+Depressionshort <- subset(Depressionshort, T1_BSSTot >= "0" & T2_BSSTot >= "0" & T3_BSSTot >= "0")
 
-#Convert SuicideShort to longform
-Suicidelong <- gather(Suicideshort, Var, Val, select = c("T1_ACSSTot", "T1_BDITot", "T1_BSSTot", "T1_SIASTot", "T2_ACSSTot", "T2_BDITot", "T2_BSSTot", "T2_SIASTot", "T3_ACSSTot", "T3_BDITot", "T3_BSSTot", "T3_SIASTot", "T1_Day", "T2_Day", "T3_Day"))
-Suicidelong <- arrange(Suicidelong, .by_group = ID)
-Suicidelong <- separate (Suicidelong, Var, c("Timepoint", "Variable"), sep = "_")
-Suicidelong <- spread(Suicidelong, Variable, Val)
-Suicidelong <- as.tibble(Suicidelong) 
+#Convert DepressionShort to longform
+Depressionlong <- gather(Depressionshort, Var, Val, select = c("T1_ACSSTot", "T1_BDITot", "T1_BSSTot", "T1_SIASTot", "T2_ACSSTot", "T2_BDITot", "T2_BSSTot", "T2_SIASTot", "T3_ACSSTot", "T3_BDITot", "T3_BSSTot", "T3_SIASTot", "T1_Day", "T2_Day", "T3_Day"))
+Depressionlong <- arrange(Depressionlong, .by_group = ID)
+Depressionlong <- separate (Depressionlong, Var, c("Timepoint", "Variable"), sep = "_")
+Depressionlong <- spread(Depressionlong, Variable, Val)
+Depressionlong <- as.tibble(Depressionlong) 
 #Removing someone with bad T2 data
-Suicidelong <- Suicidelong[-c(784:786), ]
+Depressionlong <- Depressionlong[-c(784:786), ]
 
-Suicidelong <- dplyr::select(Suicidelong, -Timepoint)
+Depressionlong <- dplyr::select(Depressionlong, -Timepoint)
 
 #Create a wave variable...repeat 1,2,3 for each person
 n<- c(1, 2, 3)
-Suicidelong$Wave <- rep(n, 130)
+Depressionlong$Wave <- rep(n, 130)
 #Make a shorter dataset to work with.
-Suicidelong <- dplyr::select(Suicidelong, ID, Wave, Day, Gender, Age, Ethn, SexOrien, BDITot, BSSTot, SIASTot, ACSSTot)
+Depressionlong <- dplyr::select(Depressionlong, ID, Wave, Day, Gender, Age, Ethn, SexOrien, BDITot, BSSTot, SIASTot, ACSSTot)
 
 #Make Wave variables
-Suicideshort$Wave1 <- rep(1, 130)
-Suicideshort$Wave2 <- rep(2, 130)
-Suicideshort$Wave3 <- rep(3, 130)
-#Shorten and rearrange Suicideshort
-Suicideshort <- dplyr::select(Suicideshort, ID, Wave1, Wave2, Wave3, T1_Day, T2_Day, T3_Day, Gender, Age, Ethn, SexOrien, T1_BDITot, T2_BDITot, T3_BDITot, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot)
+Depressionshort$Wave1 <- rep(1, 130)
+Depressionshort$Wave2 <- rep(2, 130)
+Depressionshort$Wave3 <- rep(3, 130)
+
+#Shorten and rearrange Depressionshort
+Depressionshort <- dplyr::select(Depressionshort, ID, Wave1, Wave2, Wave3, T1_Day, T2_Day, T3_Day, Gender, Age, Ethn, SexOrien, T1_BDITot, T2_BDITot, T3_BDITot, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot)
 
 #Clean up
-rm(SuicideT1, SuicideT2, SuicideT3, SuicideMerge)
+rm(DepressionT1, DepressionT2, DepressionT3)
 ```
 
 1) Visualize the data
 Let's first show the study variables with the entire dataset. Need to finish up the full dataset.
 ```{r}
-# #Suicidelong %>%
-#   #ggplot(aes(x = Day, y = BDITot)) + 
-#     geom_smooth(aes(group = ID), method = "lm", se = F, color = "gray", size = .5) +
-#     geom_smooth(method = "lm", se = F, color = "red", size = 1) +
-#     labs(x = "Days", y = "Depression Score", title = "Simple Growth Curve") +
-#     theme_classic() +
-#     theme(legend.position = "none",
-#           axis.text = element_text(face = "bold", size = rel(1.2)),
-#           axis.title = element_text(face = "bold", size = rel(1.2)),
-#           plot.title = element_text(face = "bold", size = rel(1.2), hjust = .5))
-# 
-# boxplot(Suicidelongfull$BDITot,
-#         main = "Boxplot of Depression scores",
-#         xlab = "Depression",
-#         ylab = "Score",
-#         ylim = c(0, 65))
-# boxplot(Suicidelongfull$ACSSTot,
-#         main = "Boxplot of Acquired Capability for Suicide scores",
-#         xlab = "Fear of Death",
-#         ylab = "Score",
-#         ylim = c(0, 20))
-# boxplot(Suicidelongfull$SIASTot,
-#         main = "Boxplot of Social Anxiety scores",
-#         xlab = "Social Anxiety",
-#         ylab = "Score",
-#         ylim = c(0, 70))
-# boxplot(Suicidelongfull$BSSTot,
-#         main = "Boxplot of Suicide scores",
-#         xlab = "Suicide",
-#         ylab = "Score",
-#         ylim = c(0, 30))
+abline(h= c(14, 20, 29), col = c("green", "blue", "red"), boxplot(DepressionMerge$T1_BDITot,
+        main = "Boxplot of Depression scores",
+        xlab = "Depression",
+        ylab = "Score",
+        ylim = c(0, 65)))
+
+boxplot(DepressionMerge$T1_ACSSTot,
+        main = "Boxplot of Acquired Capability for Suicide scores",
+        xlab = "Fear of Death",
+        ylab = "Score",
+        ylim = c(0, 30))
+abline(h=28, col = "red", boxplot(DepressionMerge$T1_SIASTot, ylim = c(0, 70), 
+        main = "Boxplot of Social Anxiety scores",
+        xlab = "Social Anxiety",
+        ylab = "Score"))
+boxplot(DepressionMerge$T1_BSSTot,
+        main = "Boxplot of Suicide scores",
+        xlab = "Suicide",
+        ylab = "Score",
+        ylim = c(0, 20))
 ```
-#We see there's a pretty good range of scores. For reference: 19% have #moderate depression, 8% have severe depression. 31% have suggested #clincial levels of social interaction anxiety.
+We see there's a pretty good range of scores in the full sample. For reference: 12% have mild depression, 11% have moderate depression, 8% have severe depression. 32% have clinical levels of social interaction anxiety.
 
 
 ###############START HERE#########################
 Now lets look at the descriptives for the subset of those who completed all three timepoints
 ```{r}
-boxplot(Suicidelong$BDITot,
+abline(h= c(14, 20, 29), col = c("green", "blue", "red"), boxplot(Depressionshort$T1_BDITot,
         main = "Boxplot of Depression scores",
         xlab = "Depression",
         ylab = "Score",
-        ylim = c(0, 65))
-boxplot(Suicidelong$ACSSTot,
+        ylim = c(0, 65)))
+boxplot(Depressionshort$T1_ACSSTot,
         main = "Boxplot of Acquired Capability for Suicide scores",
         xlab = "Fear of Death",
         ylab = "Score",
         ylim = c(0, 20))
-boxplot(Suicidelong$SIASTot,
+abline(h=28, col = "red", boxplot(Depressionshort$T1_SIASTot,
         main = "Boxplot of Social Anxiety scores",
         xlab = "Social Anxiety",
         ylab = "Score",
-        ylim = c(0, 70))
-boxplot(Suicidelong$BSSTot,
+        ylim = c(0, 70)))
+boxplot(Depressionshort$T1_BSSTot,
         main = "Boxplot of Suicide scores",
         xlab = "Suicide",
         ylab = "Score",
         ylim = c(0, 30))
 ```
-
+Similar descriptives.
 
 ```{r}
-Suicidelong %>%
+Depressionlong %>%
   ggplot(aes(x = Day, y = BDITot)) + 
     geom_smooth(aes(group = ID), method = "lm", se = F, color = "gray", size = .5) +
     geom_smooth(method = "lm", se = F, color = "red", size = 1) +
@@ -180,13 +171,13 @@ Suicidelong %>%
           axis.title = element_text(face = "bold", size = rel(1.2)),
           plot.title = element_text(face = "bold", size = rel(1.2), hjust = .5))
 ```
-We see some variability here in how people's scores change over the number of days in the study. 
+We see some variability here in how people's scores change over the number of days in the study. But in general, it appears that people are decreasing in depressive symptoms over time.
 
 
 2) Run MLM models:
 Running an empty (intercept only) model.
 ```{r}
-IntOnly <- lmer(BDITot ~ 1 + (1 | ID), data = Suicidelong)
+IntOnly <- lmer(BDITot ~ 1 + (1 | ID), data = Depressionlong)
 summary(IntOnly)
 icc(IntOnly)
 ```
@@ -194,10 +185,10 @@ Looks like there's roughly an equal distribution between the within and between 
 
 Running a fixed slopes model.
 ```{r}
-FixSlopes <- lmer(BDITot ~ Day + (1 | ID), data = Suicidelong)
+FixSlopes <- lmer(BDITot ~ Day + (1 | ID), data = Depressionlong)
 summary(FixSlopes)
 ```
-It looks like intercept and slope are moderately correlated. That is, we see that people start out at different levels of depression (significant, positive intercept), and they tend to decrease over time (significant, negative slope). These could be semester effects, but this study ran over the entire year, so it's likely these seasonal effects were averaged out. 
+It looks like intercept and slope are moderately correlated. That is, we see that people start out at different levels of depression (significant, positive intercept), and they tend to decrease over time (significant, negative slope). (Unlikely that these were seasonal or semester effects as the study ran over the entire year). 
 
 Let's see how the fixed slope model compares to the intercept-only model
 ```{r}
@@ -211,7 +202,7 @@ It looks like adding in the fixed slopes helps to account for more of the residu
 
 Now let's try to model a random slope
 ```{r}
-RandSlope <- lmer(BDITot ~ Day + (Day|ID), data = Suicidelong)
+RandSlope <- lmer(BDITot ~ Day + (Day|ID), data = Depressionlong)
 summary(RandSlope)
 ```
 With the random slope model, we see a stronger correlation between intercept and slope. This means that the higher you start out in depression, the more you are expected to decrease over time (i.e., regression to the mean). We also see in this model that the intercept is still positive and statistically significant. When we model a random slope that accounts for individual variability, we see that people on average tend to decrease in their level of depression and this is statistically significant.
@@ -232,44 +223,44 @@ Adding in the random slope helps account for more of the variance and it is sign
  
 Let's add in a predictors to see if things change...
 
-We could see if the model changes based on the individual's socail anxiety scores. Note, social anxiety was assessed at all three time points, so this is technically a time-varying predictor
+We could see if the model changes based on the individual's social anxiety scores. Note, social anxiety was assessed at all three time points, so this could be considered a time-varying predictor
 ```{r}
-SIAS <- lmer(BDITot ~ Day + SIASTot + Day*SIASTot + (Day|ID), data = Suicidelong)
+SIAS <- lmer(BDITot ~ Day + SIASTot + Day*SIASTot + (Day|ID), data = Depressionlong)
 summary(SIAS)
 ```
-We see that all terms are statistically significant. That is, people who are more socially anxious are also more likely to be depressed. We also see that these are the people who are likely to decrease in their depression scores the most over time?
+We see that all terms are statistically significant. That is, people who are more socially anxious are also more likely to be depressed. We also see that there is a significant interaction between social anxiety and time.
 
 Let's try and graph this:
 ```{r}
 sjp.int(SIAS, swap.pred = TRUE, mdrt.values = c("meansd"), xlim = c(0, 110), ylim = c(0, 20))
 ```
-Let's try another predictor, fearlessness towards death (acquired capability for suicide)
+Let's try a time-invariance predictor: Gender.
 
 ```{r}
-ACSS <- lmer(BDITot ~ Day + ACSSTot + Day*ACSSTot + (Day|ID), data = Suicidelong)
-summary(ACSS)
-sjp.int(ACSS, swap.pred = TRUE, mdrt.values = c("meansd"), xlim = c(0, 120), ylim = c(0, 20))
+Gender <- lmer(BDITot ~ Day + Gender + Day*Gender + (Day|ID), data = Depressionlong)
+summary(Gender)
+sjp.int(Gender, swap.pred = TRUE, mdrt.values = c("minmax"), xlim = c(0, 120), ylim = c(0, 20))
 ```
-We see that people who start out with higher levels of fearlessness towards death are also more likely to be depressed, but there is no significant interaction with time.
+We see that women are more likly to be depressed, although neither the main effect nor the interaction are statistically significant. 
 
 Let's try and see if changing the time variable changes things. I've been measuring time in days since starting the study. What if we looked at these models using a wave variable.
 
 ```{r}
-WFixSlopes <- lmer(BDITot ~ 1 + Wave + (1 | ID), data = Suicidelong)
+WFixSlopes <- lmer(BDITot ~ 1 + Wave + (1 | ID), data = Depressionlong)
 summary(WFixSlopes)
 ```
 Here we see that there is still a significant decrease in depression over time, but that the effect is stronger when we use the Wave variable instead of the Day variable
 
 With a random slope:
 ```{r}
-WRandSlope <- lmer(BDITot ~ Wave + (Wave|ID), data = Suicidelong)
+WRandSlope <- lmer(BDITot ~ Wave + (Wave|ID), data = Depressionlong)
 summary(WRandSlope)
 ```
-Similar. There is still a significant decrease in the effect of time, but the effect is stronger when using the Wave variable.
+Similar. There is still a significant decrease in the effect of time, but the effect is stronger when using the Wave variable. Additionally, there are no issues with convergence.
 
 With a continuous, time-varying predictor:
 ```{r}
-WSIAS <- lmer(BDITot ~ Wave + SIASTot + Wave*SIASTot + (Wave|ID), data = Suicidelong)
+WSIAS <- lmer(BDITot ~ Wave + SIASTot + Wave*SIASTot + (Wave|ID), data = Depressionlong)
 summary(WSIAS)
 ```
 When using the Wave variable, the interaction with time is no longer significant.
@@ -284,19 +275,25 @@ sjp.int(WSIAS, swap.pred = TRUE, mdrt.values = c("meansd"), ylim = c(0, 20))
 Now let's try in SEM!
 
 First we need to put data back into wide format:
+
 ```{r}
-#FILL IN CODE HERE.
+#FILL IN CODE HERE FOR CONVERTING FROM LONG TO WIDE.
+
+#USE SPREAD() FUNCTION.
+
+#NOW INCLUDING PEOPLE WHO COMPLETED TWO TIME POINTS
+#Remove participants who only completed *ONE* timepoints
+
+Depressionwide <- filter(Depressionwide, T1_BDITot >="0" & T2_BDITot >= "0" | T1_BDITot >="0" & T3_BDITot > "0")
 ```
 
 Let's first start with an intercept only model:
 ```{r}
 SEMIntOnly <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot '
-SEMIntOnlyfit <- growth(SEMIntOnly, orthogonal = TRUE, missing = "ML", data = Suicideshort)
+SEMIntOnlyfit <- growth(SEMIntOnly, missing = "ML", data = Depressionwide)
 summary(SEMIntOnlyfit)
-
-SEMIntOnly2 <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot '
-SEMIntOnly2fit <- sem(SEMIntOnly2, orthogonal = TRUE, missing = "ML", data = Suicideshort)
-summary(SEMIntOnly2fit)
+summary(IntOnly)
+semPaths(SEMIntOnlyfit, what = "std")
 ```
 Looks like the intercept is similar to the MLM version (7.267 vs. 8.008)
 When I compare it to a SEM model, the estimate for intercept = 0.
@@ -305,111 +302,89 @@ This model suggests that people have different average BDI scores across all tim
 
 Now let's try with a fixed slope:
 ```{r}
-SEMFixSlopes_cov <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
-                  s =~ 0*T1_BDITot + 1*T2_BDITot + 2*T3_BDITot
-
-                  s ~~ 0*s #fixed slopes, no variance'
-SEMFixSlopescovfit <- growth(SEMFixSlopes_cov, missing = "ML", data = Suicideshort)
-summary(SEMFixSlopescovfit)
-```
-
-**Get an error for negative cov between slope and intercept**
-
-When we compare these effects to the MLM models using the Wave variable, we see similar effects for the Slope and Intercept
-
-```{r}
 SEMFixSlopes <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
                   s =~ 0*T1_BDITot + 1*T2_BDITot + 2*T3_BDITot
-                  i ~~ 0*s #no covariance 
+
                   s ~~ 0*s #fixed slopes, no variance'
-SEMFixSlopesfit <- growth(SEMFixSlopes, missing = "ML", data = Suicideshort)
+SEMFixSlopesfit <- growth(SEMFixSlopes, missing = "ML", data = Depressionwide)
+inspect(SEMFixSlopesfit, "cov.lv")
 summary(SEMFixSlopesfit)
-                  
+summary(WFixSlopes)
+semPaths(SEMFixSlopesfit, what = "std")
 ```
 
+
+When we compare these effects to the MLM models using the Wave variable, we see similar effects for the Slope and Intercept
 
 Trying with a random slope:
 ```{r}
 SEMRandSlopes <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
-                  s =~ 0*T1_BDITot + 1*T2_BDITot + 2*T3_BDITot'
-SEMRandSlopesfit <- growth(SEMRandSlopes, orthogonal = TRUE, missing = "ML", data = Suicideshort)
+                  s =~ -1*T1_BDITot + 0*T2_BDITot + 1*T3_BDITot'
+SEMRandSlopesfit <- growth(SEMRandSlopes, missing = "ML", data = Depressionwide)
 summary(SEMRandSlopesfit)
-inspect(SEMRandSlopesfit, "cov.lv")
+summary(WRandSlope)
+semPaths(SEMRandSlopesfit, what = "std")
 ```
-**Errors for negative variances for slope**
 
 Again, when we compare the MLM Random Slope model, we see the same effects for slope and intercept.
 
-Practice constraining the slope to have no variance
-```{r}
-SEMConstrainSlope <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
-                  s =~ 0*T1_BDITot + 1*T2_BDITot + 2*T3_BDITot
-                  s~~0*s'
-SEMConstrainSlopefit <- growth(SEMConstrainSlope, orthogonal = TRUE, missing = "ML", data = Suicideshort)
-summary(SEMConstrainSlopefit)
-inspect(SEMConstrainSlopefit, "cov.lv")
-```
-
 Comparing fit from MLM versus SEM models:
 ```{r}
-anova(SEMIntOnlyfit, IntOnly)
-anova(SEMFixSlopesfit, WFixSlopes)
-anova(SEMRandSlopesfit, WRandSlope)
+anova(SEMIntOnlyfit, SEMFixSlopesfit)
+anova(SEMFixSlopesfit, SEMRandSlopesfit)
 ```
-
-Looks like there are significant differences between the MLM and SEM models...
 
 Let's add in a predictor to the SEM model:
 ```{r}
 SEM_SIAS <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
                   s =~ 0*T1_BDITot + 1*T2_BDITot + 2*T3_BDITot
-                  s~~0*s
+                 
 
-                  i ~ T1_SIASTot + T2_SIASTot + T3_SIASTot
-                  s ~ T1_SIASTot + T2_SIASTot + T3_SIASTot'
-SEM_SIASfit <- growth(SEM_SIAS, orthogonal = TRUE, missing = "ML", data = Suicideshort)
+            
+                  T1_BDITot ~ T1_SIASTot
+                  T2_BDITot ~ T2_SIASTot
+                  T3_BDITot ~ T3_SIASTot '
+SEM_SIASfit <- growth(SEM_SIAS, missing = "ML", data = Depressionwide)
 summary(SEM_SIASfit)
+summary(SIAS)
 inspect(SEM_SIASfit, "cov.lv")
+semPaths(SEM_SIASfit, what = "std")
 ```
 It looks like that people with higher SIAS scores at T2 also have significantly higher average BDI scores across time. People with higher SIAS scores at T1 show a significant reduction in BDI scores from T1 to T2, but people with higher SIAS scores at T3 demonstrate a signficant increase in BDI scores from T2 to T3.
-
-*Why were there no errors for this model, even though there is a negative variance between slope and intercept?
 
 ########ESTIMATORS#########
 Now let's see what happens with a different estimator. We have been using the ML estimator; however, this is best when the variables are multivariate normal. Let's see if BDI scores are really normal...
 ```{r}
-hist(Suicideshort$T1_BDITot)
-hist(Suicideshort$T2_BDITot)
-hist(Suicideshort$T3_BDITot)
+hist(Depressionwide$T1_BDITot)
 ```
 They are not...
 This suggests we might want to use a different estimator that is more robust to non-normality. Let's try the MLM estimator.
 ```{r}
-SEMRandSlopesMLM <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
-                  s =~ 0*T1_BDITot + 1*T2_BDITot + 2*T3_BDITot'
-SEMRandSlopesfitMLM <- growth(SEMRandSlopesMLM, orthogonal = TRUE, estimator = "MLM", data = Suicideshort)
+SEMRandSlopesfitMLM <- growth(SEMRandSlopes, estimator = "MLM", data = Depressionwide)
 summary(SEMRandSlopesfitMLM)
+inspect(SEMRandSlopesfitMLM, "cov.lv")
 ```
 
 We don't see many differences between ML and MLM, likely because MLM is an extension of ML.
-We could try another one: WLSMVS. This type of estimator is best for categorical data, so it may not be the best fit for my non-normal, continuous variable.
+We could try another one: WLSMVS. This type of estimator could be better for categorical or ordinal data, so it may not be the best fit for my non-normal, continuous variable.
 ```{r}
-SEMRandSlopesWLSMVS <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
-                  s =~ 0*T1_BDITot + 1*T2_BDITot + 2*T3_BDITot'
-SEMRandSlopesfitWLSMVS <- growth(SEMRandSlopesWLSMVS, orthogonal = TRUE, estimator = "WLSMVS", data = Suicideshort)
+SEMRandSlopesfitWLSMVS <- growth(SEMRandSlopes, estimator = "WLSMVS", data = Depressionwide)
 summary(SEMRandSlopesfitWLSMVS)
+inspect(SEMRandSlopesfitWLSMVS, "cov.lv")
 ```
 We see the slope and intercept vary slightly, but the variances are different.
+
+```{r}
+SEMRandSlopesfitMLMVS <- growth(SEMRandSlopes, estimator = "MLMVS", data = Depressionwide)
+summary(SEMRandSlopesfitMLMVS)
+inspect(SEMRandSlopesfitMLMVS, "cov.lv")
+```
+
 
 #########BOOTSTRAPPING##############
 
 If you want to bootstrap:
 ```{r}
-SEMRandSlopesBoot <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
-                  s =~ 0*T1_BDITot + 1*T2_BDITot + 2*T3_BDITot
-                  s~~0*s'
-SEMRandSlopesfitBoot <- growth(SEMRandSlopesBoot, orthogonal = TRUE, estimator = "MLM", data = Suicideshort)
-SEMRandSlopesBoot <- bootstrapLavaan(SEMRandSlopesfitBoot, R = 1000L, type = "nonparametric")
-summary(SEMRandSlopesfitBoot)
+SEMFixSlopesfitBOOT <- bootstrapLavaan(SEMFixSlopesfit, R = 1000L, type = "nonparametric")
+summary(SEMFixSlopesfitBOOT)
 ```
-Is it supposed to say somewhere in the output that this was bootstrapped?
