@@ -1,0 +1,326 @@
+---
+title: "SEM for 11-2-17"
+author: "Marilyn Piccirillo"
+date: "11/2/2017"
+output: pdf_document
+---
+
+```{r}
+rm(list = ls())
+library(foreign)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(broom)
+library(ggplot2)
+library(lubridate)
+library(lme4)
+library(lavaan)
+library(sjstats)
+library(sjPlot)
+library(semPlot)
+
+#Pull in all three timepoints
+DepressionT1 <- read.spss("StressStudy_T1short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT2 <- read.spss("StressStudy_T2short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT3 <- read.spss("StressStudy_T3short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+
+#Pull in all three timepoints for SEM measurement models.
+DepressionT1SEM <- read.spss("Stress Study Database_T1_useforSEM.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT1SEM <- plyr::rename(DepressionT1SEM, c("q_bdi_1_score" = "T1BDI1", "q_bdi_2_score" = "T1BDI2", "q_bdi_3_score" = "T1BDI3", "q_bdi_4_score" = "T1BDI4", "q_bdi_5_score" = "T1BDI5", "q_bdi_6_score" = "T1BDI6", "q_bdi_7_score" = "T1BDI7", "q_bdi_8_score" = "T1BDI8", "q_bdi_9_score" = "T1BDI9", "q_bdi_10_score" = "T1BDI10", "q_bdi_11_score" = "T1BDI11", "q_bdi_12_score" = "T1BDI12", "q_bdi_13_score" = "T1BDI13", "q_bdi_14_score" = "T1BDI14", "q_bdi_15_score" = "T1BDI15", "q_bdi_16_score" = "T1BDI16", "q_bdi_17_score" = "T1BDI17", "q_bdi_18_score" = "T1BDI18", "q_bdi_19_score" = "T1BDI19", "q_bdi_20_score" = "T1BDI20", "q_bdi_21_score" = "T1BDI21"))
+DepressionT2SEM <- read.spss("Stress Study Database_T2_useforSEM.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT2SEM <- plyr::rename(DepressionT2SEM, c("q_bdi_1_score" = "T2BDI1", "q_bdi_2_score" = "T2BDI2", "q_bdi_3_score" = "T2BDI3", "q_bdi_4_score" = "T2BDI4", "q_bdi_5_score" = "T2BDI5", "q_bdi_6_score" = "T2BDI6", "q_bdi_7_score" = "T2BDI7", "q_bdi_8_score" = "T2BDI8", "q_bdi_9_score" = "T2BDI9", "q_bdi_10_score" = "T2BDI10", "q_bdi_11_score" = "T2BDI11", "q_bdi_12_score" = "T2BDI12", "q_bdi_13_score" = "T2BDI13", "q_bdi_14_score" = "T2BDI14", "q_bdi_15_score" = "T2BDI15", "q_bdi_16_score" = "T2BDI16", "q_bdi_17_score" = "T2BDI17", "q_bdi_18_score" = "T2BDI18", "q_bdi_19_score" = "T2BDI19", "q_bdi_20_score" = "T2BDI20", "q_bdi_21_score" = "T2BDI21"))
+DepressionT3SEM <- read.spss("Stress Study Database_T3_useforSEM.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT3SEM <- plyr::rename(DepressionT3SEM, c("q_bdi_1_score" = "T3BDI1", "q_bdi_2_score" = "T3BDI2", "q_bdi_3_score" = "T3BDI3", "q_bdi_4_score" = "T3BDI4", "q_bdi_5_score" = "T3BDI5", "q_bdi_6_score" = "T3BDI6", "q_bdi_7_score" = "T3BDI7", "q_bdi_8_score" = "T3BDI8", "q_bdi_9_score" = "T3BDI9", "q_bdi_10_score" = "T3BDI10", "q_bdi_11_score" = "T3BDI11", "q_bdi_12_score" = "T3BDI12", "q_bdi_13_score" = "T3BDI13", "q_bdi_14_score" = "T3BDI14", "q_bdi_15_score" = "T3BDI15", "q_bdi_16_score" = "T3BDI16", "q_bdi_17_score" = "T3BDI17", "q_bdi_18_score" = "T3BDI18", "q_bdi_19_score" = "T3BDI19", "q_bdi_20_score" = "T3BDI20", "q_bdi_21_score" = "T3BDI21"))
+
+DepT1 <- left_join(DepressionT1, DepressionT1SEM, by = "ID")
+DepT2 <- left_join(DepressionT2, DepressionT2SEM, by = "ID")
+DepT3 <- left_join(DepressionT3, DepressionT3SEM, by = "ID")
+DepressionSEM <- left_join(DepT1, DepT2, by = "ID")
+DepressionSEM <- left_join(DepressionSEM, DepT3, by = "ID")
+
+#Separatedates
+DepressionSEM$T1_Date <- as.Date(DepressionSEM$T1_DateStarted)
+DepressionSEM$T2_Date <- as.Date(DepressionSEM$T2_DateStarted)
+DepressionSEM$T3_Date <- as.Date(DepressionSEM$T3_DateStarted)
+
+#Make a shorter dataset
+DepressionSEM <- dplyr::select(DepressionSEM, ID, T1_Date, T2_Date, T3_Date, Gender, Age, Ethn, SexOrien, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_BDITot, T2_BDITot, T3_BDITot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot, T1BDI1:T1BDI21, T2BDI1:T2BDI21, T3BDI1:T3BDI21)
+#Converting into proper format
+DepressionSEM$Gender <- as.factor(DepressionSEM$Gender)
+DepressionSEM$Ethn <- as.factor(DepressionSEM$Ethn)
+DepressionSEM$SexOrien <- as.factor(DepressionSEM$SexOrien)
+DepressionSEM$Age <- as.character(DepressionSEM$Age)
+DepressionSEM$Age <- as.numeric(DepressionSEM$Age)
+DepressionSEM <- as.tibble(DepressionSEM)
+
+#Make date variables
+DepressionSEM$T1_Day <- difftime(DepressionSEM$T1_Date, DepressionSEM$T1_Date, units = c("days"))
+DepressionSEM$T2_Day <- difftime(DepressionSEM$T2_Date, DepressionSEM$T1_Date, units = c("days"))
+DepressionSEM$T3_Day <- difftime(DepressionSEM$T3_Date, DepressionSEM$T1_Date, units = c("days"))
+
+#Depressionwide <- select(Depressionshort, everything())
+#Selecting only people who completed all three time points
+DepressionSEMShort <- subset(DepressionSEM, T1_BDITot >= "0" & (T2_BDITot >= "0" | T3_BDITot >= "0"))
+
+#Convert DepressionShort to longform
+#Depressionlong <- gather(Depressionshort, Var, Val, select = c("T1_ACSSTot", "T1_BDITot", "T1_BSSTot", "T1_SIASTot", "T2_ACSSTot", "T2_BDITot", "T2_BSSTot", "T2_SIASTot", "T3_ACSSTot", "T3_BDITot", "T3_BSSTot", "T3_SIASTot", "T1_Day", "T2_Day", "T3_Day"))
+#Depressionlong <- arrange(Depressionlong, .by_group = ID)
+#Depressionlong <- separate (Depressionlong, Var, c("Timepoint", "Variable"), sep = "_")
+#Depressionlong <- spread(Depressionlong, Variable, Val)
+#Depressionlong <- as.tibble(Depressionlong) 
+#Removing someone with bad T2 data
+#Depressionlong <- Depressionlong[-c(784:786), ]
+
+#Depressionlong <- dplyr::select(Depressionlong, -Timepoint)
+
+#Create a wave variable...repeat 1,2,3 for each person
+#n<- c(1, 2, 3)
+#DepressionSEMShort$Wave <- rep(n, 273)
+#Make a shorter dataset to work with.
+#Depressionlong <- dplyr::select(Depressionlong, ID, Wave, Day, Gender, Age, Ethn, SexOrien, BDITot, BSSTot, SIASTot, ACSSTot)
+
+#Make Wave variables
+DepressionSEMShort$Wave1 <- rep(1, 273)
+DepressionSEMShort$Wave2 <- rep(2, 273)
+DepressionSEMShort$Wave3 <- rep(3, 273)
+
+#Shorten and rearrange Depressionshort
+#Depressionshort <- dplyr::select(Depressionshort, ID, Wave1, Wave2, Wave3, T1_Day, T2_Day, T3_Day, Gender, Age, Ethn, SexOrien, T1_BDITot, T2_BDITot, T3_BDITot, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot)
+
+#Clean up
+rm(DepressionT1, DepressionT2, DepressionT3, DepressionT1SEM, DepressionT2SEM, DepressionT3SEM, DepT1, DepT2, DepT3)
+```
+
+
+1) Fit a measurement model to your constructs at one time point. Try out the different types of scaling discussed in class. What changes? What stays the same?
+```{r}
+SEMMod <- ' BDI_t1 =~ T1BDI2 + T1BDI3 + T1BDI5 + T1BDI7 + T1BDI8 + T1BDI9 + T1BDI10 + T1BDI14 + T1BDI15 + T1BDI19 +T1BDI1 + T1BDI4 + T1BDI11 + T1BDI13 + T1BDI17 + T1BDI6 + T1BDI12 + T1BDI16 + T1BDI18 + T1BDI20 + T1BDI21'
+
+#Marker
+fit.marker <- cfa(SEMMod, data = DepressionSEMShort)
+summary(fit.marker, fit.measures = TRUE)
+semPaths(fit.marker, layout = "tree", whatLabels = "est")
+semPaths(fit.marker, layout = "tree", what = "std")
+
+#FixedFactor
+fit.fixed <- cfa(SEMMod, data = DepressionSEMShort, std.lv = T)
+summary(fit.fixed, fit.measures = TRUE)
+semPaths(fit.fixed, layout = "tree", whatLabels = "est")
+semPaths(fit.fixed, layout = "tree", what = "std")
+```
+
+The fit statistics are similar across the two scaling methods. However, in the marker method the the first factor loading is fixed to 1; whereas, in the fixed factor method, the variance of the latent variables are fixed to 1s.
+
+What do the fit statistics say about your latent variable? Is your latent variable just identified/saturated, under identified, or over identified?
+
+RMSEA = 0.084, CFI = 878, TLI = 0.864. All suggest adequate fit.
+
+Fit a longitudinal CFA model where you a) first correlate your latent factors across time and then b) a second model that predicts later items by a previous time (i.e., autoregressive). What are your conclusions? How does one differ across time?
+
+```{r}
+long.cfa <- ' BDI_t1 =~ T1BDI2 + T1BDI3 + T1BDI5 + T1BDI7 + T1BDI8 + T1BDI9 + T1BDI10 + T1BDI14 + T1BDI15 + T1BDI19 +T1BDI1 + T1BDI4 + T1BDI11 + T1BDI13 + T1BDI17 + T1BDI6 + T1BDI12 + T1BDI16 + T1BDI18 + T1BDI20 + T1BDI21
+
+BDI_t2 =~ T2BDI2 + T2BDI3 + T2BDI5 + T2BDI7 + T2BDI8 + T2BDI9 + T2BDI10 + T2BDI14 + T2BDI15 + T2BDI19 +T2BDI1 + T2BDI4 + T2BDI11 + T2BDI13 + T2BDI17 + T2BDI6 + T2BDI12 + T2BDI16 + T2BDI18 + T2BDI20 + T2BDI21
+
+BDI_t3 =~ T3BDI2 + T3BDI3 + T3BDI5 + T3BDI7 + T3BDI8 + T3BDI9 + T3BDI10 + T3BDI14 + T3BDI15 + T3BDI19 +T3BDI1 + T3BDI4 + T3BDI11 + T3BDI13 + T3BDI17 + T3BDI6 + T3BDI12 + T3BDI16 + T3BDI18 + T3BDI20 + T3BDI21
+
+BDI_t1 ~~ BDI_t2
+BDI_t1 ~~ BDI_t3
+BDI_t3 ~~ BDI_t3' 
+
+#FixedFactor
+fit.long.cfa <- cfa(long.cfa, data = DepressionSEMShort, std.lv = T)
+summary(fit.long.cfa, fit.measures = TRUE)
+semPaths(fit.long.cfa, layout = "tree", whatLabels = "est")
+semPaths(fit.long.cfa, layout = "tree", what = "std")
+```
+
+```{r}
+long.cfa2 <- ' BDI_t1 =~ T1BDI2 + T1BDI3 + T1BDI5 + T1BDI7 + T1BDI8 + T1BDI9 + T1BDI10 + T1BDI14 + T1BDI15 + T1BDI19 +T1BDI1 + T1BDI4 + T1BDI11 + T1BDI13 + T1BDI17 + T1BDI6 + T1BDI12 + T1BDI16 + T1BDI18 + T1BDI20 + T1BDI21
+
+BDI_t2 =~ T2BDI2 + T2BDI3 + T2BDI5 + T2BDI7 + T2BDI8 + T2BDI9 + T2BDI10 + T2BDI14 + T2BDI15 + T2BDI19 +T2BDI1 + T2BDI4 + T2BDI11 + T2BDI13 + T2BDI17 + T2BDI6 + T2BDI12 + T2BDI16 + T2BDI18 + T2BDI20 + T2BDI21
+
+BDI_t3 =~ T3BDI2 + T3BDI3 + T3BDI5 + T3BDI7 + T3BDI8 + T3BDI9 + T3BDI10 + T3BDI14 + T3BDI15 + T3BDI19 +T3BDI1 + T3BDI4 + T3BDI11 + T3BDI13 + T3BDI17 + T3BDI6 + T3BDI12 + T3BDI16 + T3BDI18 + T3BDI20 + T3BDI21
+
+BDI_t2 ~ BDI_t1
+BDI_t3 ~ BDI_t2' 
+
+#FixedFactor
+fit.long.cfa2 <- cfa(long.cfa2, data = DepressionSEMShort, std.lv = T)
+summary(fit.long.cfa2, fit.measures = TRUE)
+semPaths(fit.long.cfa2, layout = "tree", whatLabels = "est")
+semPaths(fit.long.cfa2, layout = "tree", what = "std")
+```
+The fit between the two longitudinal CFA models is the same. However, with the autoregressive model we are not modeling the relationships between all three timepoints, we are only modeling the partial regressions between each of the timepoints.
+
+Fit a longitudinal growth model in SEM and HLM. Compare and contrast the differences.
+
+
+##############
+```{r}
+rm(list = ls())
+library(foreign)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(broom)
+library(ggplot2)
+library(lubridate)
+library(lme4)
+library(lavaan)
+library(sjstats)
+library(sjPlot)
+library(semPlot)
+
+#Pull in all three timepoints
+DepressionT1 <- read.spss("StressStudy_T1short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT2 <- read.spss("StressStudy_T2short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT3 <- read.spss("StressStudy_T3short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+
+#Merge all three timepoints
+DepressionMerge <- left_join(DepressionT1, DepressionT2, by = "ID")
+DepressionMerge <- left_join(DepressionMerge, DepressionT3, by= "ID")
+
+#Separatedates
+DepressionMerge$T1_Date <- as.Date(DepressionMerge$T1_DateStarted)
+DepressionMerge$T2_Date <- as.Date(DepressionMerge$T2_DateStarted)
+DepressionMerge$T3_Date <- as.Date(DepressionMerge$T3_DateStarted)
+
+#Make a shorter dataset
+Depressionshort <- dplyr::select(DepressionMerge, ID, T1_Date, T2_Date, T3_Date, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_BDITot, T2_BDITot, T3_BDITot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot, Gender, Age, Ethn, SexOrien)
+#Converting into proper format
+Depressionshort$Gender <- as.factor(Depressionshort$Gender)
+Depressionshort$Ethn <- as.factor(Depressionshort$Ethn)
+Depressionshort$SexOrien <- as.factor(Depressionshort$SexOrien)
+Depressionshort$Age <- as.character(Depressionshort$Age)
+Depressionshort$Age <- as.numeric(Depressionshort$Age)
+Depressionshort <- as.tibble(Depressionshort)
+
+#Make date variables
+Depressionshort$T1_Day <- difftime(Depressionshort$T1_Date, Depressionshort$T1_Date, units = c("days"))
+Depressionshort$T2_Day <- difftime(Depressionshort$T2_Date, Depressionshort$T1_Date, units = c("days"))
+Depressionshort$T3_Day <- difftime(Depressionshort$T3_Date, Depressionshort$T1_Date, units = c("days"))
+
+Depressionwide <- select(Depressionshort, everything())
+#Selecting only people who completed all three time points
+Depressionshort <- subset(Depressionshort, T1_BSSTot >= "0" & T2_BSSTot >= "0" & T3_BSSTot >= "0")
+
+#Convert DepressionShort to longform
+Depressionlong <- gather(Depressionshort, Var, Val, select = c("T1_ACSSTot", "T1_BDITot", "T1_BSSTot", "T1_SIASTot", "T2_ACSSTot", "T2_BDITot", "T2_BSSTot", "T2_SIASTot", "T3_ACSSTot", "T3_BDITot", "T3_BSSTot", "T3_SIASTot", "T1_Day", "T2_Day", "T3_Day"))
+Depressionlong <- arrange(Depressionlong, .by_group = ID)
+Depressionlong <- separate (Depressionlong, Var, c("Timepoint", "Variable"), sep = "_")
+Depressionlong <- spread(Depressionlong, Variable, Val)
+Depressionlong <- as.tibble(Depressionlong) 
+#Removing someone with bad T2 data
+Depressionlong <- Depressionlong[-c(784:786), ]
+
+Depressionlong <- dplyr::select(Depressionlong, -Timepoint)
+
+#Create a wave variable...repeat 1,2,3 for each person
+n<- c(1, 2, 3)
+Depressionlong$Wave <- rep(n, 130)
+#Make a shorter dataset to work with.
+Depressionlong <- dplyr::select(Depressionlong, ID, Wave, Day, Gender, Age, Ethn, SexOrien, BDITot, BSSTot, SIASTot, ACSSTot)
+
+#Make Wave variables
+Depressionshort$Wave1 <- rep(1, 130)
+Depressionshort$Wave2 <- rep(2, 130)
+Depressionshort$Wave3 <- rep(3, 130)
+
+#Shorten and rearrange Depressionshort
+Depressionshort <- dplyr::select(Depressionshort, ID, Wave1, Wave2, Wave3, T1_Day, T2_Day, T3_Day, Gender, Age, Ethn, SexOrien, T1_BDITot, T2_BDITot, T3_BDITot, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot)
+
+#Clean up
+rm(DepressionT1, DepressionT2, DepressionT3)
+```
+
+
+Modeling a HLM growth model with a random slope
+```{r}
+HLMGrowthModel <- lmer(BDITot ~ Wave + (Wave|ID), data = Depressionlong)
+summary(HLMGrowthModel)
+```
+
+Modeling a SEM growth model with a random slope
+```{r}
+SEMGrowthModel <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
+                  s =~ 0*T1_BDITot + 1*T2_BDITot + 2*T3_BDITot'
+fit.SEMGrowthModel <- growth(SEMGrowthModel, missing = "ML", data = Depressionshort)
+summary(fit.SEMGrowthModel, fit.measures = TRUE)
+semPaths(fit.SEMGrowthModel)
+```
+The estimates for slope and intercept between the two models are roughly similar but not exactly the same. The correlation between slope and intercept in the HLM model is much smaller than the correlation between slope and intercept in the SEM model.
+
+
+Constrain the residual variances to be equal - does this change the fit of your model?
+```{r}
+SEMGrowthModel_2 <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
+                  s =~ 0*T1_BDITot + 1*T2_BDITot + 2*T3_BDITot
+T1_BDITot ~~ a*T1_BDITot
+T2_BDITot ~~ a*T2_BDITot
+T3_BDITot ~~ a*T3_BDITot'
+fit.SEMGrowthModel_2 <- growth(SEMGrowthModel_2, missing = "ML", data = Depressionshort)
+summary(fit.SEMGrowthModel_2, fit.measures = TRUE)
+semPaths(fit.SEMGrowthModel_2)
+anova(fit.SEMGrowthModel, fit.SEMGrowthModel_2)
+```
+Constraining residual variances significantly decreased model fit. Allowing the residual variances to vary is preferred.
+
+
+```{r}
+SEMGrowthModel_3 <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
+                  s =~ 0*T1_BDITot + 1*T2_BDITot + 2*T3_BDITot
+s ~ 0*s'
+fit.SEMGrowthModel_3 <- growth(SEMGrowthModel_3, missing = "ML", data = Depressionshort)
+summary(fit.SEMGrowthModel_3, fit.measures = TRUE)
+semPaths(fit.SEMGrowthModel_3)
+anova(fit.SEMGrowthModel_2, fit.SEMGrowthModel_3)
+```
+
+Constraining slopes to be fixed did not significantly change the model (p > .05)
+
+Change the time metric in your SEM growth model. How does that change your estimates? Does it change your fit statistics?
+
+```{r}
+SEMGrowthModel_T2 <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
+                  s =~ -1*T1_BDITot + 0*T2_BDITot + 1*T3_BDITot
+
+s ~ 0*s'
+fit.SEMGrowthModel_T2 <- growth(SEMGrowthModel_T2, missing = "ML", data = Depressionshort)
+summary(fit.SEMGrowthModel_T2, fit.measures = TRUE)
+semPaths(fit.SEMGrowthModel_T2)
+anova(fit.SEMGrowthModel, fit.SEMGrowthModel_T2)
+```
+Centering time at T2 as opposed to T1 signficantly decreased model fit. I fixed slope at 0 to correct for errors in negative variance for the slope, although this did not completly resolve the problem. Overall, the estimate for the intercept was larger at T1 than T2, which makes sense given that people decreased in depression over time. The slopes were approximately the same, which makes sense given that people decreased in a similar way over time.
+
+```{r}
+SEMGrowthModel_T3 <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
+                  s =~ -2*T1_BDITot + -1*T2_BDITot + 0*T3_BDITot
+
+s ~ 0*s'
+fit.SEMGrowthModel_T3 <- growth(SEMGrowthModel_T3, missing = "ML", data = Depressionshort)
+summary(fit.SEMGrowthModel_T3, fit.measures = TRUE)
+semPaths(fit.SEMGrowthModel_T3)
+anova(fit.SEMGrowthModel, fit.SEMGrowthModel_T3)
+```
+Centering time at T3 as opposed to T1 also signficantly decreased model fit. I fixed slope at 0 to correct for initial errors in negative variance for the slope and this resolved the problem. Overall, the estimate for the intercept was larger at T1 than T3, which makes sense given that people decreased in depression over time. The slopes were approximately the same, which makes sense given that people decreased in a similar way over time.
+
+Try a different type of estimation. How does that change your model?
+```{r}
+
+SEMGrowthModel <- ' i =~ 1*T1_BDITot + 1*T2_BDITot + 1*T3_BDITot 
+                  s =~ 0*T1_BDITot + 1*T2_BDITot + 2*T3_BDITot
+s ~ 0*s'
+
+SEMGrowthModel.MLM <- growth(SEMGrowthModel, estimator = "MLM", data = Depressionshort)
+summary(SEMGrowthModel.MLM, fit.measures = TRUE)
+
+
+SEMGrowthModel.MLMVS <- growth(SEMGrowthModel, estimator = "MLMVS", data = Depressionshort)
+summary(SEMGrowthModel.MLMVS, fit.measures = TRUE)
+
+anova(fit.SEMGrowthModel, SEMGrowthModel.MLM) #ML is a better estimator
+anova(fit.SEMGrowthModel, SEMGrowthModel.MLMVS) #ML is a better estimator
+```
+ML appears to be a better estimator than MLM or MLMVS.
