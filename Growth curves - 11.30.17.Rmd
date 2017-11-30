@@ -1,0 +1,393 @@
+---
+title: "Growth curves 11.30.17"
+author: "Marilyn Piccirillo"
+date: "11/30/2017"
+output: pdf_document
+---
+
+```{r}
+rm(list = ls())
+library(foreign)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(broom)
+library(ggplot2)
+library(lubridate)
+library(lme4)
+library(lavaan)
+library(sjstats)
+library(sjPlot)
+library(semPlot)
+
+#Pull in all three timepoints
+DepressionT1 <- read.spss("StressStudy_T1short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT2 <- read.spss("StressStudy_T2short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT3 <- read.spss("StressStudy_T3short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+
+#Pull in all three timepoints for SEM measurement models.
+DepressionT1SEM <- read.spss("Stress Study Database_T1_useforSEM.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT1SEM <- plyr::rename(DepressionT1SEM, c("q_bdi_1_score" = "T1BDI1", "q_bdi_2_score" = "T1BDI2", "q_bdi_3_score" = "T1BDI3", "q_bdi_4_score" = "T1BDI4", "q_bdi_5_score" = "T1BDI5", "q_bdi_6_score" = "T1BDI6", "q_bdi_7_score" = "T1BDI7", "q_bdi_8_score" = "T1BDI8", "q_bdi_9_score" = "T1BDI9", "q_bdi_10_score" = "T1BDI10", "q_bdi_11_score" = "T1BDI11", "q_bdi_12_score" = "T1BDI12", "q_bdi_13_score" = "T1BDI13", "q_bdi_14_score" = "T1BDI14", "q_bdi_15_score" = "T1BDI15", "q_bdi_16_score" = "T1BDI16", "q_bdi_17_score" = "T1BDI17", "q_bdi_18_score" = "T1BDI18", "q_bdi_19_score" = "T1BDI19", "q_bdi_20_score" = "T1BDI20", "q_bdi_21_score" = "T1BDI21"))
+DepressionT2SEM <- read.spss("Stress Study Database_T2_useforSEM.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT2SEM <- plyr::rename(DepressionT2SEM, c("q_bdi_1_score" = "T2BDI1", "q_bdi_2_score" = "T2BDI2", "q_bdi_3_score" = "T2BDI3", "q_bdi_4_score" = "T2BDI4", "q_bdi_5_score" = "T2BDI5", "q_bdi_6_score" = "T2BDI6", "q_bdi_7_score" = "T2BDI7", "q_bdi_8_score" = "T2BDI8", "q_bdi_9_score" = "T2BDI9", "q_bdi_10_score" = "T2BDI10", "q_bdi_11_score" = "T2BDI11", "q_bdi_12_score" = "T2BDI12", "q_bdi_13_score" = "T2BDI13", "q_bdi_14_score" = "T2BDI14", "q_bdi_15_score" = "T2BDI15", "q_bdi_16_score" = "T2BDI16", "q_bdi_17_score" = "T2BDI17", "q_bdi_18_score" = "T2BDI18", "q_bdi_19_score" = "T2BDI19", "q_bdi_20_score" = "T2BDI20", "q_bdi_21_score" = "T2BDI21"))
+DepressionT3SEM <- read.spss("Stress Study Database_T3_useforSEM.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT3SEM <- plyr::rename(DepressionT3SEM, c("q_bdi_1_score" = "T3BDI1", "q_bdi_2_score" = "T3BDI2", "q_bdi_3_score" = "T3BDI3", "q_bdi_4_score" = "T3BDI4", "q_bdi_5_score" = "T3BDI5", "q_bdi_6_score" = "T3BDI6", "q_bdi_7_score" = "T3BDI7", "q_bdi_8_score" = "T3BDI8", "q_bdi_9_score" = "T3BDI9", "q_bdi_10_score" = "T3BDI10", "q_bdi_11_score" = "T3BDI11", "q_bdi_12_score" = "T3BDI12", "q_bdi_13_score" = "T3BDI13", "q_bdi_14_score" = "T3BDI14", "q_bdi_15_score" = "T3BDI15", "q_bdi_16_score" = "T3BDI16", "q_bdi_17_score" = "T3BDI17", "q_bdi_18_score" = "T3BDI18", "q_bdi_19_score" = "T3BDI19", "q_bdi_20_score" = "T3BDI20", "q_bdi_21_score" = "T3BDI21"))
+
+DepT1 <- left_join(DepressionT1, DepressionT1SEM, by = "ID")
+DepT2 <- left_join(DepressionT2, DepressionT2SEM, by = "ID")
+DepT3 <- left_join(DepressionT3, DepressionT3SEM, by = "ID")
+DepressionSEM <- left_join(DepT1, DepT2, by = "ID")
+DepressionSEM <- left_join(DepressionSEM, DepT3, by = "ID")
+
+#Separatedates
+DepressionSEM$T1_Date <- as.Date(DepressionSEM$T1_DateStarted)
+DepressionSEM$T2_Date <- as.Date(DepressionSEM$T2_DateStarted)
+DepressionSEM$T3_Date <- as.Date(DepressionSEM$T3_DateStarted)
+
+#Make a shorter dataset
+DepressionSEM <- dplyr::select(DepressionSEM, ID, T1_Date, T2_Date, T3_Date, Gender, Age, Ethn, SexOrien, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_BDITot, T2_BDITot, T3_BDITot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot, T1BDI1:T1BDI21, T2BDI1:T2BDI21, T3BDI1:T3BDI21)
+#Converting into proper format
+DepressionSEM$Gender <- as.factor(DepressionSEM$Gender)
+DepressionSEM$Ethn <- as.factor(DepressionSEM$Ethn)
+DepressionSEM$SexOrien <- as.factor(DepressionSEM$SexOrien)
+DepressionSEM$Age <- as.character(DepressionSEM$Age)
+DepressionSEM$Age <- as.numeric(DepressionSEM$Age)
+DepressionSEM <- as.tibble(DepressionSEM)
+
+#Make date variables
+DepressionSEM$T1_Day <- difftime(DepressionSEM$T1_Date, DepressionSEM$T1_Date, units = c("days"))
+DepressionSEM$T2_Day <- difftime(DepressionSEM$T2_Date, DepressionSEM$T1_Date, units = c("days"))
+DepressionSEM$T3_Day <- difftime(DepressionSEM$T3_Date, DepressionSEM$T1_Date, units = c("days"))
+
+#Depressionwide <- select(Depressionshort, everything())
+#Selecting only people who completed all three time points
+DepressionSEMShort <- subset(DepressionSEM, T1_BDITot >= "0" & (T2_BDITot >= "0" | T3_BDITot >= "0"))
+
+#Convert DepressionShort to longform
+#Depressionlong <- gather(Depressionshort, Var, Val, select = c("T1_ACSSTot", "T1_BDITot", "T1_BSSTot", "T1_SIASTot", "T2_ACSSTot", "T2_BDITot", "T2_BSSTot", "T2_SIASTot", "T3_ACSSTot", "T3_BDITot", "T3_BSSTot", "T3_SIASTot", "T1_Day", "T2_Day", "T3_Day"))
+#Depressionlong <- arrange(Depressionlong, .by_group = ID)
+#Depressionlong <- separate (Depressionlong, Var, c("Timepoint", "Variable"), sep = "_")
+#Depressionlong <- spread(Depressionlong, Variable, Val)
+#Depressionlong <- as.tibble(Depressionlong) 
+#Removing someone with bad T2 data
+#Depressionlong <- Depressionlong[-c(784:786), ]
+
+#Depressionlong <- dplyr::select(Depressionlong, -Timepoint)
+
+#Create a wave variable...repeat 1,2,3 for each person
+#n<- c(1, 2, 3)
+#DepressionSEMShort$Wave <- rep(n, 273)
+#Make a shorter dataset to work with.
+#Depressionlong <- dplyr::select(Depressionlong, ID, Wave, Day, Gender, Age, Ethn, SexOrien, BDITot, BSSTot, SIASTot, ACSSTot)
+
+#Make Wave variables
+DepressionSEMShort$Wave1 <- rep(1, 273)
+DepressionSEMShort$Wave2 <- rep(2, 273)
+DepressionSEMShort$Wave3 <- rep(3, 273)
+
+#Shorten and rearrange Depressionshort
+#Depressionshort <- dplyr::select(Depressionshort, ID, Wave1, Wave2, Wave3, T1_Day, T2_Day, T3_Day, Gender, Age, Ethn, SexOrien, T1_BDITot, T2_BDITot, T3_BDITot, T1_BSSTot, T2_BSSTot, T3_BSSTot, T1_SIASTot, T2_SIASTot, T3_SIASTot, T1_ACSSTot, T2_ACSSTot, T3_ACSSTot)
+
+#Clean up
+rm(DepressionT1, DepressionT2, DepressionT3, DepressionT1SEM, DepressionT2SEM, DepressionT3SEM, DepT1, DepT2, DepT3)
+```
+
+Test measurement invariance across time for your construct. Can you run growth models? If there is evidence of non-invariance, what seems to be the problem?
+
+Configural
+```{r}
+#For latent variables, I will use cardinal symptoms of depression: low mood, loss of pleasure (BDI1, BDI2, BDI4)
+
+config <- '
+Dep1 =~ T1BDI1 + T1BDI2 + T1BDI4
+Dep2 =~ T2BDI1 + T2BDI2 + T2BDI4
+Dep3 =~ T3BDI1 + T3BDI2 + T3BDI4
+
+T1BDI1 ~~ T1BDI2 + T1BDI4
+T1BDI2 ~~ T1BDI4
+T2BDI1 ~~ T2BDI2 + T2BDI4
+T2BDI2 ~~ T2BDI4
+T3BDI1 ~~ T3BDI2 + T3BDI4
+T3BDI2 ~~ T3BDI4
+'
+
+config <- cfa(config, data = DepressionSEMShort, meanstructure = TRUE, std.lv = TRUE)
+summary(config, standardized = TRUE, fit.measures = TRUE)
+#Recieved warnings about standard errors, model may not be identified or variances are negative. "cov.lv" doesn't reveal any negative variances
+```
+Constrain - Weak
+```{r}
+weak <- '
+Dep1 =~ L1*T1BDI1 + L2*T1BDI2 + L3*T1BDI4
+Dep2 =~ L1*T2BDI1 + L2*T2BDI2 + L3*T2BDI4
+Dep3 =~ L1*T3BDI1 + L2*T3BDI2 + L3*T3BDI4
+
+Dep2 ~~ NA*Dep2
+Dep3 ~~ NA*Dep3
+
+T1BDI1 ~~ T1BDI2 + T1BDI4
+T1BDI2 ~~ T1BDI4
+T2BDI1 ~~ T2BDI2 + T2BDI4
+T2BDI2 ~~ T2BDI4
+T3BDI1 ~~ T3BDI2 + T3BDI4
+T3BDI2 ~~ T3BDI4
+'
+
+weak <- cfa(weak, data = DepressionSEMShort, meanstructure = TRUE, std.lv = TRUE)
+summary(weak, standardized = TRUE, fit.measures = TRUE)
+#Reciving warnings about matrix not being positive definite. "cov.lv" didn't show any negative variances; "theta" showed a few negative theta values....
+
+anova(config, weak)
+#No difference between the configural model and the weak - constrained model.
+```
+
+
+Constrain - Strong
+```{r}
+strong <- '
+Dep1 =~ L1*T1BDI1 + L2*T1BDI2 + L3*T1BDI4
+Dep2 =~ L1*T2BDI1 + L2*T2BDI2 + L3*T2BDI4
+Dep3 =~ L1*T3BDI1 + L2*T3BDI2 + L3*T3BDI4
+
+Dep2 ~~ NA*Dep2
+Dep3 ~~ NA*Dep3
+
+T1BDI1 ~~ T1BDI2 + T1BDI4
+T1BDI2 ~~ T1BDI4
+T2BDI1 ~~ T2BDI2 + T2BDI4
+T2BDI2 ~~ T2BDI4
+T3BDI1 ~~ T3BDI2 + T3BDI4
+T3BDI2 ~~ T3BDI4
+
+T1BDI1 ~ t1*1
+T1BDI2 ~ t2*1
+T1BDI4 ~ t3*1
+
+T2BDI1 ~ t1*1
+T2BDI2 ~ t2*1
+T2BDI4 ~ t3*1
+
+T3BDI1 ~ t1*1
+T3BDI2 ~ t2*1
+T3BDI4 ~ t3*1
+
+Dep2 ~ NA*1
+Dep3 ~ NA*1'
+
+strong <- cfa(strong, data = DepressionSEMShort, meanstructure = TRUE, std.lv = TRUE)
+summary(strong, standardized = TRUE, fit.measures = TRUE)
+#Again, warnings - "cov.lv" looks fine, "theta" shows some negative values
+anova(weak, strong)
+#no significant differences, suggests there is not measurement invariance and we may not be able to run stable/successful growth models.
+```
+Fit a second order growth model. Compare and contrast the estimates with the normal latent growth model.
+```{r}
+#Nevertheless, let's try to compute a second order growth model.
+secondorder <- '
+Dep1 =~ NA*T1BDI1 + L1*T1BDI1 + L2*T1BDI2 + L3*T1BDI4
+Dep2 =~ NA*T2BDI1 + L1*T2BDI1 + L2*T2BDI2 + L3*T2BDI4
+Dep3 =~ NA*T3BDI1 + L1*T3BDI1 + L2*T3BDI2 + L3*T3BDI4
+
+T1BDI1 ~ t1*1
+T1BDI2 ~ t2*1
+T1BDI4 ~ t3*1
+
+T2BDI1 ~ t1*1
+T2BDI2 ~ t2*1
+T2BDI4 ~ t3*1
+
+T3BDI1 ~ t1*1
+T3BDI2 ~ t2*1
+T3BDI4 ~ t3*1
+
+T1BDI1 ~~ T1BDI2 + T1BDI4
+T1BDI2 ~~ T1BDI4
+T2BDI1 ~~ T2BDI2 + T2BDI4
+T2BDI2 ~~ T2BDI4
+T3BDI1 ~~ T3BDI2 + T3BDI4
+T3BDI2 ~~ T3BDI4
+
+Dep1 ~ 0*1
+Dep2 ~ 0*1
+Dep3 ~ 0*1
+
+L1 == 3 - L2 - L3
+t1 == 0 - t2 - t3
+
+i =~ 1*Dep1 + 1*Dep2 + 1*Dep3
+s =~ 0*Dep1 + 1*Dep2 + 2*Dep3 '
+
+secondorder<- growth(secondorder, data = DepressionSEMShort, missing = "ML")
+summary(secondorder, fit.measures = TRUE)
+```
+Plot the second-order model
+```{r}
+semPaths(secondorder, whatLabels = "est", panelGroups = TRUE)
+```
+Simple Growth Model
+```{r}
+simplegrowth <- 'i_1 =~ 1*T1BDI1 + 1*T1BDI2 + 1*T1BDI4
+                 s_1 =~ 0*T1BDI1 + 1*T1BDI2 + 2*T1BDI4
+
+                 i_2 =~ 1*T2BDI1 + 1*T2BDI2 + 1*T2BDI4
+                 s_2 =~ 0*T2BDI1 + 1*T2BDI2 + 2*T2BDI4
+
+                 i_3 =~ 1*T3BDI1 + 1*T3BDI2 + 1*T3BDI4
+                 s_3 =~ 0*T3BDI1 + 1*T3BDI2 + 2*T3BDI4
+'
+
+simplegrowth <- growth(simplegrowth, data = DepressionSEMShort)
+summary(simplegrowth, fit.measures = TRUE)
+#Looks like there are some negative covariances and a negative variance on the T3 slopes...
+anova(secondorder, simplegrowth)
+#Looks like the second order model fits better? Complicated by the warnings for the simplegrowth model though...
+```
+
+Plot the simple growth model
+```{r}
+semPaths(simplegrowth, whatLabels = "est", panelGroups = TRUE)
+```
+Fit a series of multiple group models. Constrain some parameters and compare the fit.
+
+Let's try evaluating Affective sx of depression (BDI1, BDI2, BDI4) vs. Somatic sx. of deprsesion (BDI14, BDI15, BDI17) across group (gender)
+```{r}
+Group1 <- '
+Aff1 =~ T1BDI1 + T1BDI2 + T1BDI4
+Aff2 =~ T2BDI1 + T2BDI2 + T2BDI4
+Aff3 =~ T3BDI1 + T3BDI2 + T3BDI4
+
+Som1 =~ T1BDI14 + T1BDI15 + T1BDI17
+Som2 =~ T2BDI14 + T2BDI15 + T2BDI17
+Som3 =~ T3BDI14 + T3BDI15 + T3BDI17
+
+Affective =~ Aff1 + Aff2 + Aff3
+Somatic =~ Som1 + Som2 + Som3
+
+Affective ~~ Somatic
+'
+
+fit.Group1 <- cfa(Group1, data = DepressionSEMShort, std.lv = TRUE, missing = "ML", group = "Gender")
+summary(fit.Group1, standardized = TRUE, fit.measures = TRUE)
+#Encountering some warnings with the cov and variances
+```
+
+Plotting:
+```{r}
+semPaths(fit.Group1, whatLabels = "est", panelGroups = TRUE)
+```
+
+Constraining parameters:
+
+Constrain the Affective means first
+```{r}
+Group1.2 <- 'Aff1 =~ T1BDI1 + T1BDI2 + T1BDI4
+Aff2 =~ T2BDI1 + T2BDI2 + T2BDI4
+Aff3 =~ T3BDI1 + T3BDI2 + T3BDI4
+
+Som1 =~ T1BDI14 + T1BDI15 + T1BDI17
+Som2 =~ T2BDI14 + T2BDI15 + T2BDI17
+Som3 =~ T3BDI14 + T3BDI15 + T3BDI17
+
+Affective =~ c(L1, L1)*Aff1 + C(L2, L2)*Aff2 + c(L3, L3)*Aff3
+Somatic =~ Som1 + Som2 + Som3
+
+Affective ~~ Somatic
+'
+
+fit.Group1.2 <- cfa(Group1.2, data = DepressionSEMShort, group = "Gender")
+summary(fit.Group1.2, standardized = TRUE, fit.measures = TRUE)
+anova(fit.Group1, fit.Group1.2)
+#Models are identical, constraining the affective means did not make the model worse, i.e., men and women don't differ on their affective symptoms of depression
+```
+Now try constraining the Somatic means:
+```{r}
+Group1.3 <- 'Aff1 =~ T1BDI1 + T1BDI2 + T1BDI4
+Aff2 =~ T2BDI1 + T2BDI2 + T2BDI4
+Aff3 =~ T3BDI1 + T3BDI2 + T3BDI4
+
+Som1 =~ T1BDI14 + T1BDI15 + T1BDI17
+Som2 =~ T2BDI14 + T2BDI15 + T2BDI17
+Som3 =~ T3BDI14 + T3BDI15 + T3BDI17
+
+Affective =~ Aff1 + Aff2 + Aff3
+Somatic =~ c(L1, L1)*Som1 + C(L2, L2)*Som2 + c(L3, L3)*Som3
+
+Affective ~~ Somatic
+'
+
+fit.Group1.3 <- cfa(Group1.3, data = DepressionSEMShort, group = "Gender")
+summary(fit.Group1.3, standardized = TRUE, fit.measures = TRUE)
+anova(fit.Group1, fit.Group1.3)
+#Again, models are identical, constraining the somatic means also did not make the model worse, i.e., men and women don't differ on their somatic symptoms of depression
+```
+Try constraining the factor loadings:
+
+```{r}
+Group1.4 <- 'Aff1 =~ T1BDI1 + T1BDI2 + T1BDI4
+Aff2 =~ T2BDI1 + T2BDI2 + T2BDI4
+Aff3 =~ T3BDI1 + T3BDI2 + T3BDI4
+
+Som1 =~ T1BDI14 + T1BDI15 + T1BDI17
+Som2 =~ T2BDI14 + T2BDI15 + T2BDI17
+Som3 =~ T3BDI14 + T3BDI15 + T3BDI17
+
+Affective =~ Aff1 + Aff2 + Aff3
+Somatic =~ Som1 + Som2 + Som3
+
+Affective ~~ Somatic
+'
+
+fit.Group1.4 <- cfa(Group1.4, data = DepressionSEMShort, group = "Gender", group.equal = "loadings")
+summary(fit.Group1.4, standardized = TRUE, fit.measures = TRUE)
+anova(fit.Group1, fit.Group1.4)
+#Still, models are identical, constraining the factor loadings suggests that men and women really don't differ that much on the constructs as the fit is similar, when loadings are constrained to be equal
+```
+
+Try constraining intercepts:
+```{r}
+Group1.5 <- 'Aff1 =~ T1BDI1 + T1BDI2 + T1BDI4
+Aff2 =~ T2BDI1 + T2BDI2 + T2BDI4
+Aff3 =~ T3BDI1 + T3BDI2 + T3BDI4
+
+Som1 =~ T1BDI14 + T1BDI15 + T1BDI17
+Som2 =~ T2BDI14 + T2BDI15 + T2BDI17
+Som3 =~ T3BDI14 + T3BDI15 + T3BDI17
+
+Affective =~ Aff1 + Aff2 + Aff3
+Somatic =~ Som1 + Som2 + Som3
+
+Affective ~~ Somatic
+'
+
+fit.Group1.5 <- cfa(Group1.5, data = DepressionSEMShort, group = "Gender", group.equal = "intercepts")
+summary(fit.Group1.5, standardized = TRUE, fit.measures = TRUE)
+anova(fit.Group1, fit.Group1.5)
+#Still, models are identical, constraining the intercepts suggests that men and women really don't differ that much as the fit is similar, when intercepts are constrained to be equal
+```
+
+
+Finally, try constraining some, but not all parameterse:
+
+```{r}
+Group1.6 <- 'Aff1 =~ T1BDI1 + T1BDI2 + T1BDI4
+Aff2 =~ T2BDI1 + T2BDI2 + T2BDI4
+Aff3 =~ T3BDI1 + T3BDI2 + T3BDI4
+
+Som1 =~ T1BDI14 + T1BDI15 + T1BDI17
+Som2 =~ T2BDI14 + T2BDI15 + T2BDI17
+Som3 =~ T3BDI14 + T3BDI15 + T3BDI17
+
+Affective =~ Aff1 + Aff2 + Aff3
+Somatic =~ Som1 + Som2 + Som3
+
+Affective ~~ Somatic
+'
+
+fit.Group1.6 <- cfa(Group1.6, data = DepressionSEMShort, group = "Gender", group.equal = c("loadings", "intercepts"), group.partial = c("Affective =~ Aff1 + Aff2 + Aff3", "Somatic =~ Som1 + Som2 + Som3"))
+summary(fit.Group1.6, standardized = TRUE, fit.measures = TRUE)
+anova(fit.Group1, fit.Group1.6)
+#Aaaand the models are stil identical, constraining the loadings and intercepts doesn't change fit, again suggesting that men and women really don't differ that much on experience of depression
+```
+
+
+
