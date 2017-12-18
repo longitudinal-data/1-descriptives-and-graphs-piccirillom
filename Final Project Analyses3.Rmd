@@ -1,0 +1,214 @@
+---
+title: "Final Paper Analyses"
+author: "Marilyn Piccirillo"
+date: "12/12/2017"
+output: pdf_document
+---
+```{r, echo = FALSE}
+rm(list = ls())
+library(foreign)
+library(psych)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(broom)
+library(ggplot2)
+library(lubridate)
+library(lme4)
+library(lavaan)
+library(sjstats)
+library(sjPlot)
+library(semPlot)
+
+#Pull in all three timepoints
+DepressionT1 <- read.spss("StressStudy_T1short_rename.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT2 <- read.spss("StressStudy_T2short_rename.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT3 <- read.spss("StressStudy_T3short_rename.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+
+#Merge all three timepoints
+DepressionMerge <- left_join(DepressionT1, DepressionT2, by = "ID")
+DepressionMerge <- left_join(DepressionMerge, DepressionT3, by= "ID")
+
+#Make a shorter dataset
+#Depressionshort <- dplyr::select(DepressionMerge, ID, X._created_at.x, X._created_at.y, X._created_at, T1_BDI, T2_BDI, T3_BDI, T1_SIAS, T2_SIAS, T3_SIAS, T1_ACSS, T2_ACSS, T3_ACSS, T1_Burden, T1_Belong, T1_INQ, T2_Burden, T2_Belong, T2_INQ, T3_Burden, T3_Belong, T3_INQ, q_gender_0_score, q_age_0, q_ethnicity_score, q_hispanic_score, q_sexuality_score)
+
+
+#Converting into proper format
+ DepressionMerge$Gender <- as.factor(DepressionMerge$Gender)
+ DepressionMerge$Ethnicity <- as.factor(DepressionMerge$Ethnicity)
+ DepressionMerge$Hispanic <- as.factor(DepressionMerge$Hispanic)
+ DepressionMerge$Sexuality <- as.factor(DepressionMerge$Sexuality)
+
+#Separatedates
+DepressionMerge$T1_Date <- as.Date(DepressionMerge$T1_Date)
+DepressionMerge$T2_Date <- as.Date(DepressionMerge$T2_Date)
+DepressionMerge$T3_Date <- as.Date(DepressionMerge$T3_Date)
+
+#Make date variables
+DepressionMerge$T1_Day <- difftime(DepressionMerge$T1_Date, DepressionMerge$T3_Date, units = c("days"))
+DepressionMerge$T2_Day <- difftime(DepressionMerge$T2_Date, DepressionMerge$T3_Date, units = c("days"))
+DepressionMerge$T3_Day <- difftime(DepressionMerge$T3_Date, DepressionMerge$T3_Date, units = c("days"))
+
+#Make Wave variables
+DepressionMerge$Wave1 <- rep(1, 553)
+DepressionMerge$Wave2 <- rep(2, 553)
+DepressionMerge$Wave3 <- rep(3, 553)
+
+#Shorten and rearrange Depressionshort
+Depressionshort <- dplyr::select(DepressionMerge, ID, Wave1, Wave2, Wave3, T1_BDI, T2_BDI, T3_BDI, T1_SIAS, T2_SIAS, T3_SIAS, T1_Belong, T1_Burden, T2_Belong, T2_Burden, T3_Belong, T3_Burden, T1_ACSS, T2_ACSS, T3_ACSS)
+
+#Selecting only people who completed at least two time points 
+#DepressionMerge <- subset(DepressionMerge, T1_ACSS >= "0" & T2_ACSS >= "0" | 
+#T3_ACSS >= "0")
+
+rm(DepressionT1, DepressionT2, DepressionT3)
+```
+
+Testing a longitudinal path model to replicate the model proposed by Davidson et al. (2011). They examined how interpersonal needs (Percieved burdensomness and thwarted belongingness) mediated the relationship of depression and social anxiety predicting suicidality. The issue with their model is that they used cross-sectional data. I'd like to replicate their model using longitundial data. There weren't enough people who indicated symptoms of suicidality, so I will use the Acquired Capability for Suicide Scale, which assesses constructs such as fearlessness towards death. ACSS scores are highly correlated with suicidality.
+
+I will test the following mediation relationships:
+
+Depression --> Percieved Burdensomness, Thwarted Belongingness --> Acquired Capability for Suicide
+Social Anxiety --> Percieved Burdensomness, Thwarted Belongingness --> Acquired Capability for Suicide
+
+I expect that the mediation effect will be stronger for Depression --> Percieved burdensomness --> ACSS and that the mediation effect will be stronger for Social Anxiety --> Thwarted Belongingness --> ACSS
+
+```{r}
+
+medDep <- '
+
+#Correlate residuals
+
+T1_BDI ~~ T2_BDI
+T2_BDI ~~ T3_BDI
+
+T1_Belong ~~ T2_Belong
+T2_Belong ~~ T3_Belong
+
+T1_Burden ~~ T2_Burden
+T2_Burden ~~ T3_Burden
+
+T1_ACSS ~~ T2_ACSS
+T2_ACSS ~~ T3_ACSS
+
+#Regressions to calculate indirect effects
+
+T1_Burden ~ a1*T1_BDI + c1*T1_ACSS
+T1_Belong ~ b1*T1_BDI + d1*T1_ACSS
+
+T2_Belong ~ a1*T1_BDI + c2*T2_ACSS + g1*T1_Belong
+T2_Burden ~ b1*T1_BDI + d2*T2_ACSS + h1*T2_Burden
+
+T3_Belong ~ a2*T2_BDI + c3*T3_ACSS + g2*T2_Belong
+T3_Burden ~ b2*T2_BDI + d3*T3_ACSS + h2*T2_Burden
+
+T2_ACSS ~ i1*T1_ACSS + e1*T1_BDI + c1*T1_Belong + d1*T1_Burden
+T3_ACSS ~ i2*T2_ACSS + e1*T1_BDI + c2*T2_Belong + d2*T2_Belong
+
+#BDI --> Belong (a)
+#BDI --> Burden (b)
+#Belong --> ACSS (c)
+#Burden --> ACSS (d)
+#BDI --> ACSS (e)
+#AR: BDI--> BDI (f)
+#AR: Belong --> Belong (g)
+#AR: Burden --> Burden (h)
+#AR: ACSS --> ACSS (i)
+
+ind:= a1*i2*c2*g1*g2 + b1*i2*d2*h1*h2 
+total:= ind + e1 + i2 '
+
+fit.medDep <- sem(medDep, data = Depressionshort, missing = "ml")
+summary(fit.medDep, standardized = TRUE, fit.measures = TRUE) 
+```
+```{r}
+medSIAS <- '
+
+
+#Correlate residuals
+
+T1_SIAS ~~ T2_SIAS
+T2_SIAS ~~ T3_SIAS
+
+T1_Belong ~~ T2_Belong
+T2_Belong ~~ T3_Belong
+
+T1_Burden ~~ T2_Burden
+T2_Burden ~~ T3_Burden
+
+T1_ACSS ~~ T2_ACSS
+T2_ACSS ~~ T3_ACSS
+
+#Regressions to calculate indirect effects
+
+T1_Burden ~ a1*T1_SIAS + c1*T1_ACSS
+T1_Belong ~ b1*T1_SIAS + d1*T1_ACSS
+
+T2_Belong ~ a1*T1_SIAS + c2*T2_ACSS + g1*T1_Belong
+T2_Burden ~ b1*T1_SIAS + d2*T2_ACSS + h1*T2_Burden
+
+T3_Belong ~ a2*T2_SIAS + c3*T3_ACSS + g2*T2_Belong
+T3_Burden ~ b2*T2_SIAS + d3*T3_ACSS + h2*T2_Burden
+
+T2_ACSS ~ i1*T1_ACSS + e1*T1_SIAS + c1*T1_Belong + d1*T1_Burden
+T3_ACSS ~ i2*T2_ACSS + e1*T1_SIAS + c2*T2_Belong + d2*T2_Belong
+
+#SIAS --> Belong (a)
+#SIAS --> Burden (b)
+#Belong --> ACSS (c)
+#Burden --> ACSS (d)
+#SIAS --> ACSS (e)
+#AR: SIAS--> SIAS (f)
+#AR: Belong --> Belong (g)
+#AR: Burden --> Burden (h)
+#AR: ACSS --> ACSS (i)
+
+ind:= a1*i2*c2*g1*g2 + b1*i2*d2*h1*h2 
+total:= ind + e1 + i2 '
+
+fit.medSIAS <- sem(medSIAS, data = Depressionshort, missing = "ml")
+summary(fit.medSIAS, standardized = TRUE, fit.measures = TRUE) 
+```
+
+```{r}
+#Descriptive stats
+table(DepressionMerge$Gender)
+table(DepressionMerge$Ethnicity)
+table(DepressionMerge$Hispanic)
+describe(DepressionMerge$Age)
+```
+
+```{r, eval = FALSE}
+#Subset data to calculate alphas
+T1BDI <- dplyr::select(DepressionMerge, T1_BDI1:T1_BDI21)
+T2BDI <- dplyr::select(DepressionMerge, T2_BDI1:T2_BDI21)
+T3BDI <- dplyr::select(DepressionMerge, T3_BDI1:T3_BDI21)
+T1SIAS <- dplyr::select(DepressionMerge, T1_SIAS1:T1_SIAS4, T1_SIAS6:T1_SIAS8, T1_SIAS10, T1_SIAS12:T1_SIAS20)
+T2SIAS <- dplyr::select(DepressionMerge, T2_SIAS1:T2_SIAS4, T2_SIAS6:T2_SIAS8, T2_SIAS10, T2_SIAS12:T2_SIAS20)
+T3SIAS <- dplyr::select(DepressionMerge, T3_SIAS1:T3_SIAS4, T3_SIAS6:T3_SIAS8, T3_SIAS10, T3_SIAS12:T3_SIAS20)
+T1ACSS <- dplyr::select(DepressionMerge, T1_ACSS1:T1_ACSS5)
+T2ACSS <- dplyr::select(DepressionMerge, T2_ACSS1:T2_ACSS5)
+T3ACSS <- dplyr::select(DepressionMerge, T3_ACSS1:T3_ACSS5)
+T1Belong <- dplyr::select(DepressionMerge, T1_INQ7:T1_INQ15)
+T2Belong <- dplyr::select(DepressionMerge, T2_INQ7:T2_INQ16)
+T3Belong <- dplyr::select(DepressionMerge, T3_INQ7:T3_INQ16)
+T1Burden <- dplyr::select(DepressionMerge, T1_INQ1:T1_INQ6)
+T2Burden <- dplyr::select(DepressionMerge, T2_INQ1:T2_INQ6)
+T3Burden <- dplyr::select(DepressionMerge, T3_INQ1:T3_INQ6)
+
+alpha(T1BDI)
+alpha(T2BDI)
+alpha(T3BDI)
+alpha(T1SIAS)
+alpha(T2SIAS)
+alpha(T3SIAS)
+alpha(T1ACSS, check.keys = TRUE)
+alpha(T2ACSS, check.keys = TRUE)
+alpha(T3ACSS, check.keys = TRUE)
+alpha(T1Burden)
+alpha(T2Burden)
+alpha(T3Burden)
+alpha(T1Belong, check.keys = TRUE)
+alpha(T2Belong, check.keys = TRUE)
+alpha(T3Belong, check.keys = TRUE)
+```
