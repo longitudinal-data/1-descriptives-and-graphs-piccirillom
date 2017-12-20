@@ -1,0 +1,299 @@
+---
+title: "ALDA_SEM Week 2 MLM"
+author: "Marilyn Piccirillo"
+date: "10/19/2017"
+output: pdf_document
+---
+
+```{r}
+rm(list = ls())
+library(foreign)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(broom)
+library(ggplot2)
+library(lubridate)
+library(lme4)
+library(lavaan)
+library(sjstats)
+library(sjPlot)
+library(semPlot)
+
+#Pull in all three timepoints
+DepressionT1 <- read.spss("StressStudy_T1short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT2 <- read.spss("StressStudy_T2short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+DepressionT3 <- read.spss("StressStudy_T3short.sav", use.value.labels = FALSE, to.data.frame = TRUE)
+
+#Merge all three timepoints
+DepressionMerge <- left_join(DepressionT1, DepressionT2, by = "ID")
+DepressionMerge <- left_join(DepressionMerge, DepressionT3, by= "ID")
+
+#Separatedates
+DepressionMerge$T1_Date <- as.Date(DepressionMerge$X._created_at.x)
+DepressionMerge$T2_Date <- as.Date(DepressionMerge$X._created_at.y)
+DepressionMerge$T3_Date <- as.Date(DepressionMerge$X._created_at)
+
+#Make a shorter dataset
+Depressionshort <- dplyr::select(DepressionMerge, ID, T1_Date, T2_Date, T3_Date, T1_BDI, T2_BDI, T3_BDI, T1_SIAS, T2_SIAS, T3_SIAS, T1_ACSS, T2_ACSS, T3_ACSS, q_gender_0_score, q_age_0, q_ethnicity_score, q_sexuality_score)
+#Converting into proper format
+Depressionshort$q_gender_0_score <- as.factor(Depressionshort$q_gender_0_score)
+Depressionshort$q_ethnicity_score <- as.factor(Depressionshort$q_ethnicity_score)
+Depressionshort$q_sexuality_score <- as.factor(Depressionshort$q_sexuality_score)
+Depressionshort$q_age_0 <- as.character(Depressionshort$q_age_0)
+Depressionshort$q_age_0 <- as.numeric(Depressionshort$q_age_0)
+Depressionshort <- as.tibble(Depressionshort)
+
+#Make date variables
+Depressionshort$T1_Day <- difftime(Depressionshort$T1_Date, Depressionshort$T1_Date, units = c("days"))
+Depressionshort$T2_Day <- difftime(Depressionshort$T2_Date, Depressionshort$T1_Date, units = c("days"))
+Depressionshort$T3_Day <- difftime(Depressionshort$T3_Date, Depressionshort$T1_Date, units = c("days"))
+
+Depressionwide <- select(Depressionshort, everything())
+#Selecting only people who completed all three time points
+Depressionshort <- subset(Depressionshort, T1_BDI >= "0" & T2_BDI >= "0" & T3_BDI >= "0")
+
+#Convert DepressionShort to longform
+Depressionlong <- gather(Depressionshort, Var, Val, select = c("T1_ACSS", "T1_BDI", "T1_SIAS", "T2_ACSS", "T2_BDI", "T2_SIAS", "T3_ACSS", "T3_BDI",  "T3_SIAS", "T1_Day", "T2_Day", "T3_Day"))
+Depressionlong <- arrange(Depressionlong, .by_group = ID)
+Depressionlong <- separate (Depressionlong, Var, c("Timepoint", "Variable"), sep = "_")
+Depressionlong <- spread(Depressionlong, Variable, Val)
+Depressionlong <- as.tibble(Depressionlong) 
+#Removing someone with bad T2 data
+Depressionlong <- Depressionlong[-c(784:786), ]
+
+Depressionlong <- dplyr::select(Depressionlong, -Timepoint)
+
+#Create a wave variable...repeat 1,2,3 for each person
+n<- c(1, 2, 3)
+Depressionlong$Wave <- rep(n, 130)
+#Make a shorter dataset to work with.
+Depressionlong <- dplyr::select(Depressionlong, ID, Wave, Day, q_gender_0_score, q_age_0, q_ethnicity_score, q_sexuality_score, BDI, SIAS, ACSS)
+
+#Make Wave variables
+Depressionshort$Wave1 <- rep(1, 130)
+Depressionshort$Wave2 <- rep(2, 130)
+Depressionshort$Wave3 <- rep(3, 130)
+
+#Shorten and rearrange Depressionshort
+Depressionshort <- dplyr::select(Depressionshort, ID, Wave1, Wave2, Wave3, T1_Day, T2_Day, T3_Day, q_gender_0_score, q_age_0, q_ethnicity_score, q_sexuality_score, T1_BDI, T2_BDI, T3_BDI, T1_SIAS, T2_SIAS, T3_SIAS, T1_ACSS, T2_ACSS, T3_ACSS)
+
+#Clean up
+rm(DepressionT1, DepressionT2, DepressionT3)
+```
+######VISUALIZING THE DATA, DESCRIPTIVE OUTPUT INLCUDED
+
+1) Visualize the data
+Let's first show the study variables with the entire dataset. Need to finish up the full dataset.
+```{r}
+abline(h= c(14, 20, 29), col = c("green", "blue", "red"), boxplot(DepressionMerge$T1_BDITot,
+        main = "Boxplot of Depression scores",
+        xlab = "Depression",
+        ylab = "Score",
+        ylim = c(0, 65)))
+
+boxplot(DepressionMerge$T1_ACSSTot,
+        main = "Boxplot of Acquired Capability for Suicide scores",
+        xlab = "Fear of Death",
+        ylab = "Score",
+        ylim = c(0, 30))
+abline(h=28, col = "red", boxplot(DepressionMerge$T1_SIASTot, ylim = c(0, 70), 
+        main = "Boxplot of Social Anxiety scores",
+        xlab = "Social Anxiety",
+        ylab = "Score"))
+boxplot(DepressionMerge$T1_BSSTot,
+        main = "Boxplot of Suicide scores",
+        xlab = "Suicide",
+        ylab = "Score",
+        ylim = c(0, 20))
+```
+We see there's a pretty good range of scores in the full sample. For reference: 12% have mild depression, 11% have moderate depression, 8% have severe depression. 32% have clinical levels of social interaction anxiety.
+
+
+Now lets look at the descriptives for the subset of those who completed all three timepoints
+```{r}
+abline(h= c(14, 20, 29), col = c("green", "blue", "red"), boxplot(Depressionshort$T1_BDITot,
+        main = "Boxplot of Depression scores",
+        xlab = "Depression",
+        ylab = "Score",
+        ylim = c(0, 65)))
+boxplot(Depressionshort$T1_ACSSTot,
+        main = "Boxplot of Acquired Capability for Suicide scores",
+        xlab = "Fear of Death",
+        ylab = "Score",
+        ylim = c(0, 20))
+abline(h=28, col = "red", boxplot(Depressionshort$T1_SIASTot,
+        main = "Boxplot of Social Anxiety scores",
+        xlab = "Social Anxiety",
+        ylab = "Score",
+        ylim = c(0, 70)))
+boxplot(Depressionshort$T1_BSSTot,
+        main = "Boxplot of Suicide scores",
+        xlab = "Suicide",
+        ylab = "Score",
+        ylim = c(0, 30))
+```
+Similar descriptives.
+
+1) Run linear models on all of your subjects (a basic regression). What is the average intercept, the average slope?
+```{r}
+LinModel <- lm(BDI ~ Day, data = Depressionlong)
+summary(LinModel)
+rse(LinModel)
+```
+The average intercept is: 10.14 BDI score (at baseline)
+The average slope is: -.09
+Residual standard error = 8.65
+
+
+2) Now run a mlm/lmer model with only a random intercept. What is the ICC? What does residual variance look like compared to linear model? Create a graph to show this effect.
+2) Run MLM models:
+Running an empty (intercept only) model.
+```{r}
+IntOnly <- lmer(BDI ~ 1 + (1 | ID), data = Depressionlong)
+summary(IntOnly)
+icc(IntOnly)
+rse(IntOnly)
+
+IntOnly.ci <- confint(IntOnly, level = .95, oldNames = F)
+IntOnly.ci
+summary1 <- broom::tidy(IntOnly)
+summary1
+
+#Plotting residuals
+IntOnly.aug <- abs(broom::augment(IntOnly)[,c(4)])
+head(IntOnly.aug)
+mean.mlm = mean(IntOnly.aug)
+sd.mlm = sd(IntOnly.aug)
+
+LinMod.aug <- abs(broom::augment(LinModel)[,5])
+head(LinMod.aug)
+mean.lin <- mean(LinMod.aug)
+sd.lin <- sd(LinMod.aug)
+
+dataframe <- data.frame("Type" = c("Linear Model", "Intercept Only Model"), 
+                        "Mean" = c(mean.lin, mean.mlm), "SD"= c(sd.lin, sd.mlm))
+
+ResidPlot <- ggplot(dataframe, aes(Type, Mean)) + 
+                   geom_col(fill = "cornflowerblue") +  
+                   geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width=0.2)
+ResidPlot + labs(y="Average Residual (+/- SD)", x = "Type of Model") 
+```
+Average intercept = 8.008 (at baseline)
+Slope = 0 (empty model)
+ICC = .60. Looks like there's roughly an equal distribution between the within and between person levels (slightly more on the between-person level). 
+Residual variance = 31.65
+Residual standard error = 4.82
+
+The residual standard error for the intercept only model is about half of the residual variance of the linear model. This is interesting because the Linear model uses time (Day) as a predictor, whereas this empty, intercept only model does not account for time, but still does a better job of explaining more variance.
+
+3) Introduce a fixed slope term. What is the difference in terms of the fixed effects estimates between this estimate and the previous? Of the residual standard error? Create a graph to show both fixed effects estimates and the CIs around them.
+
+Running a fixed slopes model.
+```{r}
+library(MuMIn)
+FixSlopes <- lmer(BDI ~ Day + (1 | ID), data = Depressionlong)
+summary(FixSlopes)
+rse(FixSlopes)
+anova(IntOnly, FixSlopes)
+
+FixSlopes.ci <- confint(FixSlopes, level = .95, oldNames = F)
+FixSlopes.ci
+summary1 <- broom::tidy(FixSlopes)
+r.squaredGLMM(FixSlopes)
+
+#Graphing fixed effects
+dataframe <- data.frame("Type" = c("Linear Model_Intercept", "MLMMod_Intercept", "MLMMod_Day"), 
+                        "Mean" = c(38.72, summary1[1,2], summary1[2,2]), 
+                        "CILower"= c(IntOnly.ci[3,1], FixSlopes.ci[3,1], FixSlopes.ci[4,1]),
+                        "CIUpper" = c(IntOnly.ci[3,2], FixSlopes.ci[3,2], FixSlopes.ci[4,2]))
+
+FixedPlot <- ggplot(dataframe, aes(x = reorder(Type, -Mean), Mean)) + 
+                   geom_col(fill = "cornflowerblue") +  
+                   geom_errorbar(aes(ymin = CILower, ymax = CIUpper), width=0.2)
+FixedPlot + labs(y="Fixed Effect (95% CI)", x = "Type of Model") 
+
+```
+Average intercept = 10.28 (At baseline)
+Slope = -0.10 depression scores/day
+Residual variance = 26.03
+Residual standard error = 4.33
+
+The intercept (i.e., depression at baseline) score is larger in the fixed effects model than in the intercept only. Additionally, the residual variance is smaller as compared the intercept only model. This is in keeping with the fact that we have added more predictors to the model, which should help measure and capture more variance. This is supported by the results of the ANOVA, which suggests that the fixed effects model exhibits better fit.
+
+Furthermore, it looks like intercept and slope are moderately correlated. That is, we see that people start out at different levels of depression (significant, positive intercept), and they tend to decrease over time (significant, negative slope). (Unlikely that these were seasonal or semester effects as the study ran over the entire year). 
+
+4) Run an additional model with a random slope. How does this change compare to the previous model? Should you keep the random slope or not?
+5) Interpret the correlation between the slope and the intercept.
+
+Now let's try to model a random slope
+```{r}
+RandSlope <- lmer(BDI ~ Day + (Day|ID), data = Depressionlong)
+summary(RandSlope)
+anova(FixSlopes, RandSlope)
+```
+With the random slope model, we see a *stronger* correlation between intercept and slope. This means that the higher you start out in depression, the more you are expected to decrease over time (i.e., regression to the mean). We also see in this model that the intercept is still positive and statistically significant. When we model a random slope that accounts for individual variability, we see that people on average tend to decrease in their level of depression and this is statistically significant. Comparing the random slopes model to the fixed slopes model, we see that the Fixed slopes model exhibits better fit. Additionally, it looks like we ran into convergence issues with the random slopes model.
+
+6. Create a density plot of the random effects from your final model.
+```{r}
+library(merTools)
+re.sim <- REsim(FixSlopes)
+head(re.sim)
+
+#Density Intercept
+graph1 <- re.sim %>% 
+  filter(term == "(Intercept)") 
+ggplot(graph1, aes(mean)) +
+  geom_density()
+
+#Density Day
+graph2 <- re.sim %>% 
+  filter(term == "Day") 
+ggplot(graph2, aes(mean)) +
+  geom_density()
+```
+
+7. Create a catepillar plot of the random effects. Is there any person that seems odd in terms of a large standard errors around intercept and slope estimates?
+```{r}
+graph3 <- plotREsim(re.sim, labs = T)
+graph3
+```
+The caterpillar plot suggests taht there may be a few individuals whose depression scores are significantly different than the group average.
+
+8. Create a plot of the trajectory, along with a spaghetti plot of each person's individual slope. Set the alpha level (transparency) on the individual slopes to make them easier to see.
+```{r}
+Predict <- predictInterval(merMod = IntOnly, newdata = Depressionlong, level = 0.9, n.sims = 100, 
+                           stat = "median", include.resid.var = TRUE)
+head(Predict)
+Depressionlong$fit <- Predict$fit
+Depressionlong$upr <- Predict$upr
+Depressionlong$lwr <- Predict$lwr
+
+
+#Spaghetti plot 1
+ggplot(aes(x=Day, y=fit), data=Depressionlong) +
+  geom_point() +
+  stat_smooth(method = lm, se = F) +
+  labs(x="Day", y="Depression score") + theme_bw() +
+  stat_smooth(aes(x = Day, y = upr), method = lm, se = F, alpha = .3, linetype = "dashed") +
+  stat_smooth(aes(x = Day, y = lwr), method = lm, se = F, alpha = .3, linetype = "dashed")+
+  geom_line(data = Depressionlong, aes(x = Day, y = fit, group=ID), alpha = .3) +
+  coord_cartesian(xlim = c(7,21), ylim = c(20,62)) +
+  theme_classic()
+
+#Spaghetti plot 2
+ggplot(aes(x=Day, y=fit), data=Depressionlong) +
+  #geom_point() +
+  stat_smooth(method = lm, se = F, aes(x = Day, y = fit, group=ID), alpha = .3, 
+              color = "lightsteelblue3") +
+  stat_smooth(method = lm, se = F, color = "royalblue4") +
+  labs(x="Day", y="Depression score") + theme_bw() +
+  stat_smooth(aes(x = Day, y = upr), method = lm, se = F, alpha = .3, linetype = "dashed", 
+              color = "royalblue4") +
+  stat_smooth(aes(x = Day, y = lwr), method = lm, se = F, alpha = .3, linetype = "dashed",
+              color = "royalblue4")+
+  coord_cartesian(xlim = c(7,21), ylim = c(20,62)) +
+  theme_classic()
+```
+
+ 
